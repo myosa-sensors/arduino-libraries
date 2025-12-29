@@ -1,0 +1,204 @@
+publishDate: 2025-12-29
+title: Sensor-Integrated Real-Time Anti-Drowsiness Safety System for Drivers Using MYOSA Platform
+excerpt: A Sensor-Integrated Real-Time Anti-Drowsiness Safety System using the MYOSA platform monitors driver alertness through eye-blink and motion sensors, processing data in real time. When drowsiness is detected, a speaker-based voice alert is activated to warn the driver and to prevent accidents.
+Tags:
+- MYOSA Platform
+- Embedded Systems
+- Sensor-Based Safety System
+- Voice-Based Alert System
+Project tagline: Real-time driver drowsiness detection with intelligent voice alerts for safer driving.
+##Acknowledgements: 
+We gratefully acknowledge the IEEE Sensors Council for providing the MYOSA hardware kit, which enabled the successful implementation of the sensor-integrated system.
+We also thank the management, Principal and the Department of Electrical and Electronics Engineering, New Horizon College of Engineering, Bengaluru, for offering the necessary infrastructure and academic support for this project.  
+Our sincere gratitude goes to Dr. M. Karthika, Associate Professor, for her invaluable guidance and encouragement throughout the work. Finally, we thank our friends and families for their continued motivation and support.
+##Overview:
+The Sensor-Integrated Real-Time Anti-Drowsiness Safety System for Drivers, developed using the MYOSA platform, aims to enhance vehicular safety by continuously monitoring driver alertness through integrated sensing technologies. The system employs an eye-blink detection sensor to analyse eyelid closure duration and blink frequency, supported by motion-based sensors to assess driver behaviour.
+The proposed system architecture offers an efficient, low-cost, and reliable solution for real-time driver monitoring, making it well suited for implementation in intelligent transportation and advanced driver assistance systems.
+### What the Project Does
+This project presents a real-time driver safety system that monitors the driver’s alertness and surrounding conditions using multiple sensors integrated with the MYOSA platform. The system detects driver drowsiness through eye-blink monitoring and identifies hazardous situations such as gas leakage or abnormal motion. When unsafe conditions are detected, the system provides immediate voice-based alerts through a DFPlayer Mini module and speaker, ensuring effective and intuitive driver warnings.
+### How It Works
+The system is built around the MYOSA platform with an ESP32 microcontroller that interfaces with various sensors. An eye-blink detection sensor mounted on the driver’s spectacles monitors eyelid movement to assess alertness levels. Motion and orientation data are obtained from the MPU6050 accelerometer and gyroscope, while the MQ2 sensor detects harmful gases. Environmental parameters such as temperature, pressure, and altitude are measured using the BMP180 sensor.
+All sensor data are continuously acquired and processed in real time by the microcontroller using predefined threshold-based decision algorithms. When prolonged eye closure, excessive gas concentration, or abnormal motion is detected, the controller triggers the DFPlayer Mini module to play pre-recorded audio warnings (such as “Drowsiness detected” or “Alert! Gas detected”) through a connected speaker. Simultaneously, sensor readings and alert messages are displayed on an OLED screen, providing both audio and visual feedback to the driver.
+### Who It Is For
+The system is intended for automotive drivers operating under extended driving durations, nocturnal conditions, or commercial transport environments, where fatigue-induced impairment is prevalent. It is additionally applicable to fleet management and intelligent transportation systems, enabling enhanced driver safety through continuous physiological monitoring and real-time voice-based alert mechanisms.
+### **Images**
+<p align="center">
+  <img src="/myosa-drowsiness.jpg.jpeg" width="800"><br/>
+  <i>Hardware implementation of the MYOSA-based real-time anti-drowsiness safety system</i>
+</p>
+Circuit diagram: 
+### **Videos**
+<video controls width="100%">
+  <source src="/myosa-drowsiness.mp4" type="video/mp4">
+</video>
+**Key features:**
+* Real-time monitoring of driver alertness using eye-blink and motion sensors
+* Embedded sensor fusion implemented on the MYOSA platform
+* Threshold-based drowsiness detection algorithm for fast response
+* Speaker-based voice alert system for immediate driver warning
+* Low-latency real-time signal acquisition and processing
+* Compact, low-cost, and energy-efficient embedded design
+* Scalable architecture suitable for intelligent transportation systems
+ ## Usage Instructions:
+* Ensure that the MYOSA platform is properly powered using a stable power supply.
+* The eye-blink detection sensor is mounted on the driver’s spectacles (specks) and aligned with the eye level to ensure accurate blink detection.
+* Switch ON the system and allow it to initialize and calibrate the sensors.
+* During vehicle operation, the system continuously monitors the driver’s eye-blink patterns and motion data in real time.
+* If drowsiness is detected, the system automatically activates the speaker to deliver a voice alert warning.
+* The driver should respond to the alert by taking appropriate corrective action, such as resting or stopping the vehicle safely.
+* Power OFF the system after vehicle operation is completed.
+Code used: 
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include <Adafruit_MPU6050.h>
+#include <Adafruit_BMP085.h>
+#include <Adafruit_Sensor.h>
+#include <BluetoothSerial.h>
+#include <HardwareSerial.h>
+#include <DFRobotDFPlayerMini.h>
+// OLED screen dimensions
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
+Adafruit_MPU6050 mpu;
+Adafruit_BMP085 bmp;
+BluetoothSerial SerialBT;
+// Sensor pins
+#define MQ2_PIN 34
+#define IR_PIN 25
+// DFPlayer UART
+HardwareSerial dfSerial(2);
+DFRobotDFPlayerMini dfplayer;
+#define MQ2_THRESHOLD 1500
+bool sleepAlertPlayed = false;
+void setup() {
+    Serial.begin(115200);
+    pinMode(IR_PIN, INPUT);
+
+    // Print welcome message
+    Serial.println("Hello MYOSA");
+    // Bluetooth
+    SerialBT.begin("MYOSA_DRIVER_MONITOR");
+    Serial.println("Bluetooth Started");
+    // I2C pins
+    Wire.begin(21, 22);
+    // OLED setup
+    display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+    display.clearDisplay();
+    display.display();
+    // MPU6050 setup
+    if (!mpu.begin(0x69)) {
+        display.println("MPU6050 FAIL");
+        display.display();
+        while (1);
+    }
+    // BMP180 setup
+    if (!bmp.begin()) {
+        display.println("BMP180 FAIL");
+        display.display();
+        while (1);
+    }
+    // DFPlayer setup
+    dfSerial.begin(9600, SERIAL_8N1, 16, 17);
+    if (!dfplayer.begin(dfSerial)) {
+        display.println("DFPlayer FAIL");
+        display.display();
+        while (1);
+    }
+    dfplayer.volume(25);
+    display.clearDisplay();
+}
+void loop() {
+    // Read MPU6050
+    sensors_event_t a, g, temp;
+    mpu.getEvent(&a, &g, &temp);
+    // Read BMP180
+    float temperature = bmp.readTemperature();
+    // Read MQ2 and IR sensors
+    int mq2Value = analogRead(MQ2_PIN);
+    int irValue = digitalRead(IR_PIN);
+    bool sleepDetected = false;
+    // Sleep detection logic
+    if (irValue == LOW || mq2Value > MQ2_THRESHOLD) {
+        sleepDetected = true;
+    }
+    // Play alert via DFPlayer
+    if (sleepDetected && !sleepAlertPlayed) {
+        dfplayer.play(1);
+        sleepAlertPlayed = true;
+    }
+    if (!sleepDetected) {
+        sleepAlertPlayed = false;
+    }
+    // OLED display
+    display.clearDisplay();
+    display.setCursor(0, 0);
+    display.print("AX: "); display.print(a.acceleration.x, 1);
+    display.print(" AY: "); display.println(a.acceleration.y, 1);
+    display.print("Temp: "); display.print(temperature);
+    display.println(" C");
+    display.print("MQ2: "); display.println(mq2Value);
+    display.print("IR: "); display.println(irValue == LOW ? "YES" : "NO");
+    display.println("----------------");
+    if (sleepDetected) {
+        display.setTextSize(2);
+        display.println("SLEEP");
+        display.println("DETECTED");
+        display.setTextSize(1);
+    } else {
+        display.println("STATUS: NORMAL");
+    }
+    display.display();
+    // Bluetooth output
+    SerialBT.println("---- DRIVER STATUS ----");
+    SerialBT.print("AX: "); SerialBT.println(a.acceleration.x, 1);
+    SerialBT.print("AY: "); SerialBT.println(a.acceleration.y, 1);
+    SerialBT.print("Temp: "); SerialBT.print(temperature); SerialBT.println(" C");
+    SerialBT.print("MQ2: "); SerialBT.println(mq2Value);
+    SerialBT.print("IR: "); SerialBT.println(irValue == LOW ? "YES" : "NO");
+    SerialBT.print("STATUS: "); SerialBT.println(sleepDetected ? "SLEEP DETECTED" : "NORMAL");
+    SerialBT.println("-----------------------");
+    delay(800);
+}
+## Tech Stack
+* **Microcontroller / Platform:** MYOSA Development Board (ESP32-based)
+* **Sensors:**
+  - Eye-Blink Detection Sensor (IR Sensor)
+  - OLED Display (SSD1306) 128x64 monochrome OLED for data display
+  - Barometric Pressure Sensor (BMP180)
+  - Light/Proximity/Gesture Sensor (APDS9960)
+  - Motion / Accelerometer Sensor
+  - MQ2 Sensor (gas, smoke, alcohol detection)
+* **Alert Module:** Speaker / DF Player for voice alerts
+* **Programming Language:** Arduino C/C++
+* **Libraries / Firmware:**
+  - Sensor communication libraries (I2C/SPI)
+  - DF Player / Audio playback library
+  - Real-time data processing routines
+* **Power Supply:** 5V from USB cable
+* **Additional Tools:** Serial Monitor for debugging and testing.
+## Requirements / Installation
+### Software Requirements
+* **Arduino IDE:** Version 1.8.19 or above
+* **Required Arduino Libraries:**
+  - I2C / SPI Sensor Libraries
+  - DF Player Mini Library for audio playback
+* **USB Drivers:** For MYOSA motherboard
+* **Serial Monitor:** For debugging and testing
+* **Bluetooth Terminal Application:** For serial Bluetooth communication
+
+### Installation Steps
+1. Install Arduino IDE on your PC and configure the ESP32/MYOSA board in the Board Manager.
+2. Connect the sensors and DF Player module to the MYOSA board as per the circuit diagram.
+3. Install all required libraries in Arduino IDE.
+4. Load the project code onto the MYOSA board via USB.
+5. Power the system and verify sensor readings using the Serial Monitor.
+6. Ensure the speaker is functioning correctly to provide voice alerts.
+
+
+
+
+
