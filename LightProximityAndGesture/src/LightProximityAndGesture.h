@@ -4,12 +4,11 @@
   Existing readily-available libraries would have been used "AS IS" and modified for ease of learning purpose.
 
   Synopsis of Light Proximity and Gesture Board
-  MYOSA Platform consists of an Light Proximity and Gesture Board. It is equiped with APDS9960 IC.
-  It is a digital RGB, ambient light, proximity and gesture sensor device with I2C compatible interface.
-  I2C Address of the board = 0x39.
-  Detailed Information about Light Proximity and Gesture board Library and usage is provided in the link below.
-  Detailed Guide: https://drive.google.com/file/d/1On6kzIq3ejcu9aMGr2ZB690NnFrXG2yO/view
- 
+  The MYOSA light and gesture board uses the APDS9960 sensor at I2C address 0x39.
+  Ambient light is available in lux or raw counts; RGB is in percentages and proximity in counts.
+  Gesture sensing reports direction, near/far motion and timeout status.
+  Successful configuration settings are restored when the board reconnects.
+
   NOTE
   All information, including URL references, is subject to change without prior notice.
   Please always use the latest versions of software-release for best performance.
@@ -17,12 +16,15 @@
   "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied
 
   Modifications
-  1 December, 2021 by Pegasus Automation
+  11 September, 2026 by Pegasus Automation
   (as a part of MYOSA Initiative)
  
-  Contact Team MakeSense EduTech for any kind of feedback/issues pertaining to performance or any update request.
-  Email: dev.myosa@gmail.com
+  Contact Team MYOSA for any kind of feedback/issues pertaining to performance or any update request.
+  Email: myosa.event@gmail.com
 */
+
+#ifndef MYOSA_LIGHT_PROXIMITY_GESTURE_H
+#define MYOSA_LIGHT_PROXIMITY_GESTURE_H
 
 #include <stdint.h>
 #include <math.h>
@@ -276,6 +278,11 @@ typedef struct gesture_data_type {
     uint8_t out_threshold;
 } gesture_data_type_t;
 
+/*
+ * Call begin() after Wire setup, then enable the required sensing engines.
+ * Light and proximity readings are ADC counts, not lux or calibrated distance.
+ * RGB/gesture pointers refer to internal buffers overwritten by later calls.
+ */
 class LightProximityAndGesture
 {
   public:
@@ -328,7 +335,10 @@ class LightProximityAndGesture
     bool clearAmbientLightInt(void);
     bool clearProximityInt(void);
     /* Ambient light methods */
+    // Keep raw counts for existing thresholds; lux is an RGB-derived approximation.
     uint16_t getAmbientLight(bool print=true);
+    float getAmbientLightLux(bool print=true);
+    bool lightReadingValid(void) const { return _lightReadingValid; }
     uint16_t *getRGBProportion(bool print=true);
     uint16_t getRedProportion(void);
     uint16_t getGreenProportion(void);
@@ -348,6 +358,10 @@ class LightProximityAndGesture
     int _gesture_state;
     int _gesture_motion;
     bool _isConnected;
+    uint8_t _configValues[128] = {};
+    uint8_t _configValid[16] = {};
+    uint16_t _color[3] = {};
+    bool _lightReadingValid = false;
     /* Gesture processing */
     void resetGestureParameters(void);
     bool processGestureData(void);
@@ -363,6 +377,7 @@ class LightProximityAndGesture
     bool setGestureMode(uint8_t mode);
     /* Ambient light methods */
     bool readAmbientLight(uint16_t *val);
+    bool readAmbientLightLux(float *lux);
     bool readRedLight(uint16_t *val);
     bool readGreenLight(uint16_t *val);
     bool readBlueLight(uint16_t *val);
@@ -375,10 +390,12 @@ class LightProximityAndGesture
     uint8_t _i2cSlaveAddress;
     void i2c_init(void);
     bool readByte(uint8_t reg, uint8_t *in);
-    int8_t readMultiBytes(uint8_t reg, uint8_t length, uint8_t *in);
+    int16_t readMultiBytes(uint8_t reg, uint8_t length, uint8_t *in);
     bool readMultiBytes(uint8_t length, uint8_t *in);
     bool writeByte(uint8_t reg, uint8_t val);
     bool writeByte(uint8_t reg);
     bool writeAddress(void);
     void delay_ms(uint16_t ms);
 };
+
+#endif

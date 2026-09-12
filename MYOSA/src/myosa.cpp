@@ -4,18 +4,10 @@
   Existing readily-available libraries would have been used "AS IS" and modified for ease of learning purpose.
   
   Synopsis of MYOSA platform
-  MYOSA Platform consists of a centralized motherboard a.k.a Controller board, 5 different sensor modules, an OLED display and an actuator board in the kit.
-  Controller board is designed on ESP32 module. It is a low-power system on a chip microcontrollers with integrated Wi-Fi and Bluetooth.
-  5 Sensors are as below,
-  1 --> Accelerometer and Gyroscope (6-axis motion sensor)
-  2 --> Temperature and Humidity Sensor
-  3 --> Barometric Pressure Sensor
-  4 --> Light, Proximity and Gesture Sensor
-  5 --> Air Quality Sensor
-  Actuator board contains a Buzzer and an AC switching circuit to turn on/off an electrical appliance.
-  There is also an OLED display in the MYOSA kit.
-  Detailed Information about MYOSA platform and usage is provided in the link below.
-  Detailed Guide: https://drive.google.com/file/d/1On6kzIq3ejcu9aMGr2ZB690NnFrXG2yO/view
+  MYOSA uses an ESP32 controller with Wi-Fi and Bluetooth connectivity.
+  The kit includes motion, temperature/humidity, pressure, light/proximity/gesture
+  and air-quality boards, with an OLED and relay/buzzer outputs.
+  The libraries support individual sensor examples and combined BLE applications.
 
   NOTE
   All information, including URL references, is subject to change without prior notice.
@@ -24,365 +16,191 @@
   "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied
 
   Modifications
-  1 December, 2021 by Pegasus Automation
+  11 September, 2026 by Pegasus Automation
   (as a part of MYOSA Initiative)
   
-  Contact Team MakeSense EduTech for any kind of feedback/issues pertaining to performance or any update request.
-  Email: dev.myosa@gmail.com
+  Contact Team MYOSA for any kind of feedback/issues pertaining to performance or any update request.
+  Email: myosa.event@gmail.com
 */
 
+/* Library Inclusion */
 #include "myosa.h"
-#include <BLEDevice.h>
-#include <BLE2902.h>
 
-#include <iostream>
+#define NUM_SERVICES 6
+#define MAX_CHARACTERISTICS 5
+#define MAX_EVENTS 2
 
-#define NUM_SERVICES          6
-#define MAX_CHARACTERISTICS   5
-#define MAX_EVENTS            2
+static BLECharacteristic *pCharacteristics[NUM_SERVICES][MAX_CHARACTERISTICS] = {};
+static myosa_detail::Event eventArr[MAX_EVENTS] = {};
+static SemaphoreHandle_t eventMutex = nullptr;
 
-BLECharacteristic *pCharacteristics[NUM_SERVICES][MAX_CHARACTERISTICS];
-
-struct eventData {
-  bool isEnable = false;
-  int serviceNumber, charNumber, paraNumber;
-  double min, max;
-  bool isInclusive, isStrict;
-  char action;
-};
-
-int eventCnt = 0;
-eventData eventArr[MAX_EVENTS];
-
-class MyServerCallbacks: public BLEServerCallbacks {
-    void onConnect(BLEServer* pServer) {
-      Serial.println("Device connected");
-    }
-
-    void onDisconnect(BLEServer* pServer) {
-      Serial.println("Device disconnected");
-      pServer->getAdvertising()->start();
-      Serial.println("BLE server re-started!");
+class MyServerCallbacks : public BLEServerCallbacks
+{
+    void onDisconnect(BLEServer *server) override
+    {
+      server->getAdvertising()->start();
     }
 };
 
-char parseEventType(const String& input, String& remainingString)
+class MyCallbacks : public BLECharacteristicCallbacks
 {
-  char separator = ',';
-
-  int separatorIndex = input.indexOf(separator);
-  char firstChar = input.charAt(0);
-  remainingString = input.substring(separatorIndex+1);
-
-  // Serial.print("First character: ");
-  // Serial.println(firstChar);
-  // Serial.print("Remaining string: ");
-  // Serial.println(remainingString);
-
-  return firstChar;
-}
-
-void createEvent(const String& input) 
-{
-  int inputIndex = 0;
-  int outputIndex = 0;
-  String value;
-  eventData tempEvent;
-
-  tempEvent.isEnable = true;
-
-  while (input[inputIndex] != '\0') {
-    if (input[inputIndex] != ',') {
-      value += input[inputIndex];
-    }
-    else {
-      switch (outputIndex) {
-        case 0:
-          tempEvent.serviceNumber = atoi(value.c_str());
-          // data.serviceNumber = atoi(value.c_str());
-          break;
-        case 1:
-          tempEvent.charNumber = atoi(value.c_str());
-          // data.charNumber = atoi(value.c_str());
-          break;
-        case 2:
-          tempEvent.paraNumber = atoi(value.c_str());
-          // data.paraNumber = atoi(value.c_str());
-          break;
-        case 3:
-          tempEvent.min = atof(value.c_str());
-          // data.min = atof(value.c_str());
-          break;
-        case 4:
-          tempEvent.max = atof(value.c_str());
-          // data.max = atof(value.c_str());
-          break;
-        case 5:
-          tempEvent.isInclusive = (value[0] == '1');
-          // data.isInclusive = (value[0] == '1');
-          break;
-        case 6:
-          tempEvent.isStrict = (value[0] == '1');
-          // data.isStrict = (value[0] == '0');
-          break;
-      }
-      outputIndex++;
-      value = "";
-    }
-    inputIndex++;
-  }
-  if(outputIndex == 7) 
-  {
-    tempEvent.action = value.c_str()[0];
-    // data.action = value.c_str()[0];
-  }
-
-  if (tempEvent.action == 'b')
-  {
-    eventArr[0] = tempEvent;
-  }
-  else
-  {
-    eventArr[1] = tempEvent;
-  }
-}
-
-void deleteEvent(const String& input)
-{
-  if (input[0] == 'b')
-  {
-    eventArr[0].isEnable = false;
-  }
-  else
-  {
-    eventArr[1].isEnable = false;
-  }
-}
-
-void printData(const eventData& data) {
-  Serial.print("isEnable: ");
-  Serial.println(data.isEnable);
-  Serial.print("serviceNumber: ");
-  Serial.println(data.serviceNumber);
-  Serial.print("charNumber: ");
-  Serial.println(data.charNumber);
-  Serial.print("paraNumber: ");
-  Serial.println(data.paraNumber);
-  Serial.print("min: ");
-  Serial.println(data.min);
-  Serial.print("max: ");
-  Serial.println(data.max);
-  Serial.print("isInclusive: ");
-  Serial.println(data.isInclusive);
-  Serial.print("isStrict: ");
-  Serial.println(data.isStrict);
-  Serial.print("action: ");
-  Serial.println(data.action);
-  Serial.println();
-}
-
-
-class MyCallbacks: public BLECharacteristicCallbacks {
-    void onWrite(BLECharacteristic *pCharacteristic) {
-      std::string newValue = pCharacteristic->getValue().c_str();
-
-      if (newValue.length() > 0) 
+    void onWrite(BLECharacteristic *characteristic) override
+    {
+      const auto value = characteristic->getValue();
+      if(!eventMutex || value.length() < 3 || value.length() > 160)
+        return;
+      // Parse before taking the lock; invalid commands leave existing events intact.
+      const char *command = value.c_str();
+      if(strlen(command) != value.length() || command[1] != ',')
+        return;
+      myosa_detail::Event next = {};
+      int slot = -1;
+      if(command[0] == 'c' || command[0] == 'u')
       {
-        Serial.println("*********");
-        Serial.print("New value: ");
-        Serial.println(newValue.c_str());
-        Serial.println();
-        Serial.println("*********");
-
-        String payload;
-        char eventType;
-        
-        eventType = parseEventType(newValue.c_str(), payload);
-
-        // Serial.println(payload);
-
-        switch(eventType)
-        {
-          case 'c':
-            createEvent(payload);
-            eventCnt++;
-            break;
-          case 'u':
-            createEvent(payload);
-            break;
-          case 'd':
-            deleteEvent(payload);
-            eventCnt--;
-            break;
-          default:
-            break;
-        }
-        
-        for (int i = 0; i < MAX_EVENTS; i++)
-        {
-          printData(eventArr[i]);
-        }
+        if(!myosa_detail::parseEvent(command + 2, next))
+          return;
+        slot = next.action == 'b' ? 0 : 1;
       }
+      else if(command[0] == 'd' && value.length() == 3)
+      {
+        if(command[2] != 'b' && command[2] != 'r')
+          return;
+        slot = command[2] == 'b' ? 0 : 1;
+      }
+      if(slot < 0)
+        return;
+      xSemaphoreTake(eventMutex, portMAX_DELAY);
+      eventArr[slot] = next;
+      xSemaphoreGive(eventMutex);
     }
 };
 
-MYOSA::MYOSA():Ag(MPU6050_ADDRESS_AD0_HIGH), /* Accelerometer and Gyroscope sensor init */
-Aq(CCS811_I2C_ADDRESS1,refResitance), /* Air Quality sensor init */
-Pr(ULTRA_HIGH_RESOLUTION), /* Barometric Pressure sensor init */
-Lpg(), /* Light, Proximity and Gesture sensor init */
-gpioExpander(), /* GPIO expander PCA9536 init */
-Th(), /* temperature and Humidity sensor init */
-display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET)  /* OLED display */
+MYOSA::MYOSA()
+    : Ag(MPU6050_ADDRESS_AD0_HIGH),     /* Accelerometer and Gyroscope sensor init */
+      Aq(CCS811_I2C_ADDRESS1, 10000.f), /* Air Quality sensor init */
+      Pr(ULTRA_HIGH_RESOLUTION),        /* Barometric Pressure sensor init */
+      Lpg(),                            /* Light, Proximity and Gesture sensor init */
+      gpioExpander(),                   /* GPIO expander PCA9536 init */
+      Th(),                             /* temperature and Humidity sensor init */
+      display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET) /* OLED display */
 {
 }
 
-/**
- *
+/*
+ * Create BLE services and initialize the supplied boards; false means at least one setup step failed.
  */
 bool MYOSA::begin(void)
 {
+  if(!eventMutex)
+    eventMutex = xSemaphoreCreateMutex();
+  if(!eventMutex)
+    return false;
   BLEDevice::init("MYOSA_1");
   BLEServer *pServer = BLEDevice::createServer();
+  if(!pServer)
+    return false;
   pServer->setCallbacks(new MyServerCallbacks());
 
-  for (int i = 0; i < NUM_SERVICES; i++)
+  for(int i = 0; i < NUM_SERVICES; ++i)
   {
     char serviceUUID[37];
-    int charIterator = 0;
-    
     sprintf(serviceUUID, "4fafc201-1fb5-459e-8fcc-c5c9c33191b%d", i);
     Serial.println(serviceUUID);
-
-    BLEService *pService = pServer->createService(serviceUUID);
-
-    if(i == 0)
-    {
-      charIterator = 4;
-    }
-    else if(i == 1)
-    {
-      charIterator = 2;
-    }
-    else if(i == 5)
-    {
-      charIterator = 1;
-    }
-    else
-    {
-      charIterator = 3;
-    }
-
-    for (int j = 0; j < charIterator; j++)
+    // The last service accepts event commands; the others publish sensor values.
+    const uint8_t count = i == 5 ? 1 : myosa_detail::characteristicCounts[i];
+    const uint32_t numHandles = i == 5 ? 3 : 1 + 3 * count;
+    BLEService *pService = pServer->createService(BLEUUID(serviceUUID), numHandles);
+    if(!pService)
+      return false;
+    for(int j = 0; j < count; ++j)
     {
       char characteristicUUID[37];
       sprintf(characteristicUUID, "beb5483e-36e1-4688-b7f5-ea07361b2b%d%d", i, j);
       Serial.println(characteristicUUID);
-      if(i == 5 && j == 0)
+      if(i == 5)
       {
         pCharacteristics[i][j] = pService->createCharacteristic(
-                      characteristicUUID,
-                      BLECharacteristic::PROPERTY_READ |
-                      BLECharacteristic::PROPERTY_WRITE
-                    );
+            characteristicUUID,
+            BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE);
+        if(!pCharacteristics[i][j])
+          return false;
         pCharacteristics[i][j]->setCallbacks(new MyCallbacks());
-
         pCharacteristics[i][j]->setValue("Hello from MYOSA");
       }
       else
       {
-        pCharacteristics[i][j] = pService->createCharacteristic(
-                      characteristicUUID,
-                      BLECharacteristic::PROPERTY_NOTIFY
-                    );
-        pCharacteristics[i][j]->addDescriptor(new BLE2902()); 
+        pCharacteristics[i][j] =
+            pService->createCharacteristic(characteristicUUID, BLECharacteristic::PROPERTY_NOTIFY);
+        if(!pCharacteristics[i][j])
+          return false;
+        pCharacteristics[i][j]->addDescriptor(new BLE2902());
       }
     }
-
-    pService->start();
+    if(!pService->start())
+      return false;
   }
 
   pServer->getAdvertising()->start();
   Serial.println("BLE server started!");
 
-  if(display.begin() == true)
+  bool ready = true;
+  _displayReady = display.begin();
+  ready = _displayReady && ready;
+  ready = Ag.begin() && ready;
+  ready = (Aq.begin() == SENSOR_SUCCESS) && ready;
+  ready = Pr.begin() && ready;
+  const bool lightReady = Lpg.begin();
+  ready = lightReady && ready;
+  if(lightReady)
   {
-    Serial.println("OLED initializated");
+    ready = Lpg.enableAmbientLightSensor(DISABLE) && ready;
+    ready = Lpg.enableProximitySensor(DISABLE) && ready;
+    ready = Lpg.setProximityGain(PGAIN_2X) && ready;
   }
-  if(Ag.begin() == true)
+  const bool actuatorReady = gpioExpander.ping();
+  ready = actuatorReady && ready;
+  if(actuatorReady)
   {
-    Serial.println("AccelAndGyro initializated");
-  }
-  if(Aq.begin() == true)
-  {
-    Serial.println("AirQuality initializated");
-  }
-  if(Pr.begin() == true)
-  {
-    Serial.println("BarometricPressure initializated");
-  }
-  if(Lpg.begin() == true)
-  {
-    Serial.println("LightProximityAndGesture initializated");
-    if( Lpg.enableAmbientLightSensor(DISABLE) )
-    {
-      Serial.println("Light sensor is now running");
-    }
-    if( Lpg.enableProximitySensor(DISABLE) )
-    {
-      Serial.println("Proximity sensor is now running");
-    }
-    /* Adjust the Proximity sensor gain */
-    if ( !Lpg.setProximityGain(PGAIN_2X) )
-    {
-      Serial.println("Something went wrong trying to set PGAIN");
-    }
-  }
-  if(gpioExpander.ping() == true)
-  {
-    /* Set relay IO as output */
-    gpioExpander.setMode(RELAY_IO, IO_OUTPUT);
+    // Set output latches before changing direction to avoid startup pulses.
     gpioExpander.setState(RELAY_IO, IO_LOW);
-    /* Set buzzer IO as output */
-    gpioExpander.setMode(BUZZER_IO, IO_OUTPUT);
+    gpioExpander.setMode(RELAY_IO, IO_OUTPUT);
     gpioExpander.setState(BUZZER_IO, IO_LOW);
-    Serial.println("gpioExpander initializated");
+    gpioExpander.setMode(BUZZER_IO, IO_OUTPUT);
   }
-  if(Th.begin() == true)
-  {
-    Serial.println("TempAndHumidity initializated");
-  }
-
-  return true;
+  ready = Th.begin() && ready;
+  if(!ready)
+    Serial.println("One or more MYOSA boards could not be initialized.");
+  return ready;
 }
 
-/**
- *
+/*
+ * Drive the configured relay output high without changing its pin direction.
  */
 void MYOSA::turnOnRelay(void)
 {
-  gpioExpander.setMode(RELAY_IO, IO_OUTPUT);
   gpioExpander.setState(RELAY_IO, IO_HIGH);
+  gpioExpander.setMode(RELAY_IO, IO_OUTPUT);
 }
 
-/**
- *
+/*
+ * Drive the configured relay output low without changing its pin direction.
  */
 void MYOSA::turnOffRelay(void)
 {
-  gpioExpander.setMode(RELAY_IO, IO_OUTPUT);
   gpioExpander.setState(RELAY_IO, IO_LOW);
+  gpioExpander.setMode(RELAY_IO, IO_OUTPUT);
 }
 
-/**
- *
+/*
+ * Drive the buzzer output high; print controls the optional Serial message.
  */
 void MYOSA::turnOnBuzzer(int print)
 {
-  gpioExpander.setMode(BUZZER_IO, IO_OUTPUT);
   gpioExpander.setState(BUZZER_IO, IO_HIGH);
+  gpioExpander.setMode(BUZZER_IO, IO_OUTPUT);
 
-  if (print)
-  { 
+  if(print && _displayReady)
+  {
     display.clearDisplay();
     display.setTextSize(1);
     display.setTextColor(WHITE);
@@ -394,431 +212,332 @@ void MYOSA::turnOnBuzzer(int print)
       display.setFont(&VeraMono7pt7b);
       display.print("Buzzer: Turn On");
       display.println();
+
       display.display();
+
     }
   }
 }
 
-/**
- *
+/*
+ * Drive the buzzer output low; print controls the optional Serial message.
  */
 void MYOSA::turnOffBuzzer(int print)
 {
-  gpioExpander.setMode(BUZZER_IO, IO_OUTPUT);
   gpioExpander.setState(BUZZER_IO, IO_LOW);
-
-
-  // display.clearDisplay();
-  display.setTextSize(1);
-  display.setTextColor(WHITE);
-  display.setFont(&VeraMonoBold7pt7b);
-  // display.setCursor(0, 9);
-  // drawCentreString("Actuator");
-  if(gpioExpander.ping())
+  gpioExpander.setMode(BUZZER_IO, IO_OUTPUT);
+  if(print && _displayReady)
   {
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(WHITE);
+    display.setFont(&VeraMonoBold7pt7b);
+    display.setCursor(0, 9);
+    drawCentreString("Actuator");
     display.setFont(&VeraMono7pt7b);
-  display.print("Buzzer: Turn Off");
-    display.println();
-    display.display();
-  }
+    display.println("Buzzer: Turn Off");
 
+    display.display();
+
+  }
 }
-/**
- *
+/*
+ * Center text horizontally using its bounds in the currently selected font.
  */
 void MYOSA::drawCentreString(const String &buf)
 {
-    int16_t x1, y1;
-    uint16_t w, h;
-    display.getTextBounds(buf, display.getCursorX(), display.getCursorY(), &x1, &y1, &w, &h); //calc width of new string
-    display.setCursor((SCREEN_WIDTH - w) / 2, y1+h);
-    display.println(buf);
+  if(!_displayReady || buf.length() == 0)
+    return;
+  int16_t x1, y1;
+  uint16_t w, h;
+  display.getTextBounds(buf, display.getCursorX(), display.getCursorY(), &x1, &y1, &w,
+                        &h); //calc width of new string
+  display.setCursor((SCREEN_WIDTH - w) / 2, y1 + h);
+  display.println(buf);
 }
 
-/**
- *
+/*
+ * Draw a smaller symbol below the current text baseline.
  */
 void MYOSA::drawSubscriptSymbol(const String &buf)
 {
+  if(!_displayReady || buf.length() == 0)
+    return;
   display.setFont(nullptr);
-  display.setCursor(display.getCursorX(), display.getCursorY()+3);
+  display.setCursor(display.getCursorX(), display.getCursorY() + 3);
   display.print(buf);
-  display.setCursor(display.getCursorX(), display.getCursorY()-3);
+  display.setCursor(display.getCursorX(), display.getCursorY() - 3);
   display.setFont(&VeraMono7pt7b);
 }
 
-/**
- *
+/*
+ * Draw a smaller symbol above the current text baseline.
  */
 void MYOSA::drawSuperscriptSymbol(const String &buf)
 {
+  if(!_displayReady || buf.length() == 0)
+    return;
   display.setFont(nullptr);
-  display.setCursor(display.getCursorX(), display.getCursorY()-6);
+  display.setCursor(display.getCursorX(), display.getCursorY() - 6);
   display.print(buf);
-  display.setCursor(display.getCursorX(), display.getCursorY()+6);
+  display.setCursor(display.getCursorX(), display.getCursorY() + 6);
   display.setFont(&VeraMono7pt7b);
 }
 
-/**
- *
+/*
+ * Draw the degree marker used by the sensor temperature pages.
  */
 void MYOSA::drawDegreeSymbol(void)
 {
-  display.drawCircle(display.getCursorX()+4,display.getCursorY()-8,2,1);
-  display.setCursor(display.getCursorX()+6, display.getCursorY());
+  if(!_displayReady)
+    return;
+  display.drawCircle(display.getCursorX() + 4, display.getCursorY() - 8, 2, 1);
+  display.setCursor(display.getCursorX() + 6, display.getCursorY());
 }
 
-/**
- * 
- */
 // void MYOSA::findIndex(void)
 // {
 
 // }
 
-/**
- * 
+/*
+ * Collect readings once, notify only valid values, and evaluate events using that same snapshot.
  */
 void MYOSA::sendBleData(void)
 {
-  for (int i = 0; i < NUM_SERVICES - 1; i++)
+
+  float readings[NUM_SERVICES][4][3];
+  for(auto &service : readings)
+    for(auto &characteristic : service)
+      for(float &v : characteristic)
+        v = NAN;
+  if(Ag.ping())
   {
-    int charIterator = 0;
-    char payload[25];
+    readings[0][0][0] = Ag.getAccelX(false);
+    readings[0][0][1] = Ag.getAccelY(false);
+    readings[0][0][2] = Ag.getAccelZ(false);
+    readings[0][1][0] = Ag.getGyroX(false);
+    readings[0][1][1] = Ag.getGyroY(false);
+    readings[0][1][2] = Ag.getGyroZ(false);
+    readings[0][2][0] = Ag.getTiltX(false);
+    readings[0][2][1] = Ag.getTiltY(false);
+    readings[0][2][2] = Ag.getTiltZ(false);
+    readings[0][3][0] = Ag.getTempC(false);
+    readings[0][3][1] = readings[0][3][0] * 1.8f + 32.f;
+  }
 
-    payload[0] = '*';
-
-    if(i == 0)
+  if(Aq.ping())
+  {
+    if(Aq.isDataAvailable())
+      Aq.readAlgorithmResults();
+    if(Aq.hasReading())
     {
-      charIterator = 4;
-    }
-    else if(i == 1)
-    {
-      charIterator = 2;
-    }
-    else
-    {
-      charIterator = 3;
-    }
-
-    for (int j = 0; j < charIterator; j++)
-    {
-      if (Ag.ping())
-      {
-        if (i == 0 && j == 0)
-        {
-          sprintf(payload, "%0.2f, %0.2f, %0.2f", Ag.getAccelX(), Ag.getAccelY(), Ag.getAccelZ());
-        }
-        else if (i == 0 && j == 1)
-        {
-          sprintf(payload, "%0.2f, %0.2f, %0.2f", Ag.getGyroX(), Ag.getGyroY(), Ag.getGyroZ());
-        }
-        else if (i == 0 && j == 2)
-        {
-          sprintf(payload, "%0.2f, %0.2f, %0.2f", Ag.getTiltX(), Ag.getTiltY(), Ag.getTiltZ());
-        }
-        else if (i == 0 && j == 3)
-        {
-          sprintf(payload, "%0.2f, %0.2f", Ag.getTempC(), Ag.getTempF());
-        } 
-      }
-      if (Aq.ping())
-      {
-        if (i == 1 && j == 0)
-        {
-          sprintf(payload, "%d", Aq.getCO2());
-        }
-        else if (i == 1 && j == 1)
-        {
-          sprintf(payload, "%d", Aq.getTVOC());
-        } 
-      }
-      if (Pr.ping())
-      {
-        if (i == 2 && j == 0)
-        {
-          sprintf(payload, "%0.2f, %0.2f", Pr.getTempC(), Pr.getTempF());
-        }
-        else if (i == 2 && j == 1)
-        {
-          sprintf(payload, "%0.2f, %0.2f, %0.2f", Pr.getPressurePascal(), Pr.getPressureHg(), Pr.getPressureBar());
-        }
-        else if (i == 2 && j == 2)
-        {
-          sprintf(payload, "%0.2f", Pr.getAltitude(SEA_LEVEL_AVG_PRESSURE));
-        } 
-      }
-      if (Lpg.ping())
-      {
-        if (i == 3 && j == 0)
-        {
-          sprintf(payload, "%d", Lpg.getAmbientLight());
-        }
-        else if (i == 3 && j == 1)
-        {
-          sprintf(payload, "%0.2f", Lpg.getProximity());
-        }
-        else if(i == 3 && j == 2)
-        {
-          sprintf(payload, "%d, %d, %d", Lpg.getRedProportion(), Lpg.getGreenProportion(), Lpg.getBlueProportion());
-        } 
-      }
-      if (Th.ping())
-      {
-        if (i == 4 && j == 0)
-        {
-          sprintf(payload, "%0.2f, %0.2f", Th.getTempC(), Th.getTempF());
-        }
-        else if (i == 4 && j == 1)
-        {
-          sprintf(payload, "%0.2f", Th.getRelativeHumdity());
-        }
-        else if (i == 4 && j == 2)
-        {
-          sprintf(payload, "%0.2f, %0.2f", Th.getHeatIndexC(), Th.getHeatIndexF());
-        } 
-      }
-
-      if (payload[0] != '*')
-      {
-        Serial.print("Notifying value of characteristic ");
-        Serial.print(j);
-        Serial.print(" in service ");
-        Serial.print(i);
-        Serial.print(": ");
-        Serial.println(payload);
-        pCharacteristics[i][j]->setValue(payload);
-        pCharacteristics[i][j]->notify(); 
-      }
-    }
-    if (payload[0] != '*')
-    {
-      Serial.println();
+      readings[1][0][0] = Aq.getCO2(false);
+      readings[1][1][0] = Aq.getTVOC(false);
     }
   }
 
-  //Check for events 
-  for (int i = 0; i < MAX_EVENTS; i++)
+  if(Pr.ping())
   {
-    if (eventArr[i].isEnable)
+    readings[2][0][0] = Pr.getTempC(false);
+    readings[2][0][1] = readings[2][0][0] * 1.8f + 32.f;
+    const int32_t pressure = Pr.getPressure();
+    if(pressure != BMP180_ERROR && pressure > 0)
     {
-      double val;
-      int cnt = 0;
-    std::string value = pCharacteristics[eventArr[i].serviceNumber][eventArr[i].charNumber]->getValue().c_str();
-    Serial.println(value.c_str());
+      readings[2][1][0] = pressure / 1000.f;
+      readings[2][1][1] = pressure / 133.322368f;
+      readings[2][1][2] = pressure / 100.f;
+      readings[2][2][0] =
+          44330.f * (1.f - powf((pressure / 100.f) / SEA_LEVEL_AVG_PRESSURE, 1.f / 5.255f));
+    }
+  }
 
+  if(Lpg.ping())
+  {
+    const float ambient = Lpg.getAmbientLightLux(false);
+    if(Lpg.lightReadingValid())
+      readings[3][0][0] = ambient;
+    readings[3][1][0] = Lpg.getProximity(false);
+    const uint16_t *rgb = Lpg.getRGBProportion(false);
+    if(Lpg.lightReadingValid())
+      for(uint8_t i = 0; i < 3; ++i)
+        readings[3][2][i] = rgb[i];
+  }
 
-      char* token = strtok((char*)value.c_str(), ",");
+  if(Th.ping())
+  {
+    readings[4][0][0] = Th.getTempC(false);
+    readings[4][0][1] = readings[4][0][0] * 1.8f + 32.f;
 
-      while (token != NULL)
+    readings[4][1][0] = Th.getRelativeHumdity(false);
+
+    readings[4][2][0] = Th.getHeatIndexC(false);
+    readings[4][2][1] = readings[4][2][0] * 1.8f + 32.f;
+  }
+
+  for(uint8_t service = 0; service < NUM_SERVICES; ++service)
+  {
+    for(uint8_t characteristic = 0; characteristic < myosa_detail::characteristicCounts[service];
+        ++characteristic)
+    {
+      const uint8_t count = myosa_detail::parameterCounts[service][characteristic];
+      const float *v = readings[service][characteristic];
+      bool valid = true;
+      for(uint8_t i = 0; i < count; ++i)
+        valid = isfinite(v[i]) && valid;
+      if(!valid || !pCharacteristics[service][characteristic])
+        continue;
+      char payload[96];
+      int size;
+      const bool integers = service == 1 || (service == 3 && characteristic != 1);
+      if(integers && count == 1)
+        size = snprintf(payload, sizeof(payload), "%.0f", v[0]);
+      else if(integers)
+        size = snprintf(payload, sizeof(payload), "%.0f, %.0f, %.0f", v[0], v[1], v[2]);
+      else if(count == 1)
+        size = snprintf(payload, sizeof(payload), "%.2f", v[0]);
+      else if(count == 2)
+        size = snprintf(payload, sizeof(payload), "%.2f, %.2f", v[0], v[1]);
+      else
+        size = snprintf(payload, sizeof(payload), "%.2f, %.2f, %.2f", v[0], v[1], v[2]);
+      if(size < 0 || size >= (int)sizeof(payload))
+        continue;
+      pCharacteristics[service][characteristic]->setValue(payload);
+      pCharacteristics[service][characteristic]->notify();
+
+    }
+  }
+  if(!eventMutex)
+    return;
+  // The callback shares only event settings. All sensor and actuator I/O stays in this task.
+  xSemaphoreTake(eventMutex, portMAX_DELAY);
+  for(uint8_t i = 0; i < MAX_EVENTS; ++i)
+  {
+    const myosa_detail::Event &event = eventArr[i];
+    const bool active =
+        event.enabled && myosa_detail::matches(
+                             event, readings[event.service][event.characteristic][event.parameter]);
+    // Once an event is removed, release its output once without overriding manual control forever.
+    if(event.enabled || _eventControlled[i])
+    {
+      if(i == 0)
       {
-        val = atof(token);
-        if (eventArr[i].paraNumber == cnt)
-        {
-          break;
-        }
+        if(active)
+          turnOnBuzzer(0);
         else
-        {
-          token = strtok(NULL, ",");
-        }
-        cnt++;
-      }
-      Serial.println(val);
-
-      if (eventArr[i].isInclusive)
-      {
-        if (eventArr[i].isStrict)
-        {
-          if (val >= eventArr[i].min && val <= eventArr[i].max)
-          {
-            if (eventArr[i].action == 'b')
-            {
-              turnOnBuzzer(0);
-            }
-            else
-            {
-              turnOnRelay();
-            }
-          }
-          else
-          {
-            if (eventArr[i].action == 'b')
-            {
-              turnOffBuzzer(0);
-            }
-            else
-            {
-              turnOffRelay();
-            } 
-          }
-        }
-        else
-        {
-          if (val > eventArr[i].min && val < eventArr[i].max)
-          {
-            if (eventArr[i].action == 'b')
-            {
-              turnOnBuzzer(0);
-            }
-            else
-            {
-              turnOnRelay();
-            }
-          }
-          else
-          {
-            if (eventArr[i].action == 'b')
-            {
-              turnOffBuzzer(0);
-            }
-            else
-            {
-              turnOffRelay();
-            } 
-          } 
-        }
+          turnOffBuzzer(0);
       }
       else
       {
-        if (eventArr[i].isStrict)
-        {
-          if (val <= eventArr[i].min && val >= eventArr[i].max)
-          {
-            if (eventArr[i].action == 'b')
-            {
-              turnOnBuzzer(0);
-            }
-            else
-            {
-              turnOnRelay();
-            }
-          }
-          else
-          {
-            if (eventArr[i].action == 'b')
-            {
-              turnOffBuzzer(0);
-            }
-            else
-            {
-              turnOffRelay();
-            } 
-          }
-        }
+        if(active)
+          turnOnRelay();
         else
-        {
-          if (val < eventArr[i].min && val > eventArr[i].max)
-          {
-            if (eventArr[i].action == 'b')
-            {
-              turnOnBuzzer(0);
-            }
-            else
-            {
-              turnOnRelay();
-            }
-          }
-          else
-          {
-            if (eventArr[i].action == 'b')
-            {
-              turnOffBuzzer(0);
-            }
-            else
-            {
-              turnOffRelay();
-            } 
-          } 
-        } 
-      } 
+          turnOffRelay();
+      }
     }
+    _eventControlled[i] = event.enabled;
   }
+  xSemaphoreGive(eventMutex);
 }
 
-/**
- *
+/*
+ * Print the acceleration/rotation page to Serial and the initialized OLED.
  */
 void MYOSA::printAceelAndGyro(void)
 {
-  static uint8_t nCnt=0;
+  if(!_displayReady)
+    return;
+  static uint8_t nCnt = 0;
   display.clearDisplay();
   display.setTextSize(1);
   display.setTextColor(WHITE);
   display.setFont(&VeraMonoBold7pt7b);
   display.setCursor(0, 9);
   drawCentreString("AccelGyro: Raw");
-  if(Ag.ping())  {
-   display.setFont(&VeraMono7pt7b);
+  if(Ag.ping())
+  {
+    display.setFont(&VeraMono7pt7b);
     if(nCnt == 0u)
     {
       display.print("aX:");
-      display.print(Ag.getAccelX(),1);
+      display.print(Ag.getAccelX(true), 1);
       display.print("cm/s");
       drawSuperscriptSymbol("2");
       display.println();
 
       display.print("aY:");
-      display.print(Ag.getAccelY(),1);
+      display.print(Ag.getAccelY(true), 1);
       display.print("cm/s");
       drawSuperscriptSymbol("2");
       display.println();
 
       display.print("aZ:");
-      display.print(Ag.getAccelZ(),1);
+      display.print(Ag.getAccelZ(true), 1);
       display.print("cm/s");
       drawSuperscriptSymbol("2");
     }
     else if(nCnt == 1u)
     {
       display.print("gX:");
-      display.print(Ag.getGyroX(),1);
+      display.print(Ag.getGyroX(true), 1);
       drawDegreeSymbol();
       display.println("/s");
       display.print("gY:");
-      display.print(Ag.getGyroY(),1);
+      display.print(Ag.getGyroY(true), 1);
       drawDegreeSymbol();
       display.println("/s");
       display.print("gZ:");
-      display.print(Ag.getGyroZ(),1);
+      display.print(Ag.getGyroZ(true), 1);
       drawDegreeSymbol();
       display.println("/s");
     }
     else if(nCnt == 2u)
     {
       display.print("tiltX:");
-      display.print(Ag.getTiltX(),1);
+      display.print(Ag.getTiltX(true), 1);
       drawDegreeSymbol();
       display.println();
       display.print("tiltY:");
-      display.print(Ag.getTiltY(),1);
+      display.print(Ag.getTiltY(true), 1);
       drawDegreeSymbol();
       display.println();
       display.print("tiltZ:");
-      display.print(Ag.getTiltZ(),1);
+      display.print(Ag.getTiltZ(true), 1);
       drawDegreeSymbol();
       display.println();
     }
     else
     {
       display.print("Temp:");
-      display.print(Ag.getTempC(),1);
+      display.print(Ag.getTempC(true), 1);
       drawDegreeSymbol();
       display.println("C");
       display.print("Temp:");
-      display.print(Ag.getTempF(),1);
+      display.print(Ag.getTempF(true), 1);
       drawDegreeSymbol();
       display.println("F");
     }
   }
+  else
+  {
+    Serial.println("Accelerometer and Gyroscope: Not connected");
+    display.setFont(&VeraMono7pt7b);
+    display.println("Not connected");
+  }
+  Serial.println();
+
   display.display();
-  nCnt = (nCnt+1)&3;
+
+  nCnt = (nCnt + 1) & 3;
 }
 
-/**
- *
+/*
+ * Print the air-quality page to Serial and the initialized OLED.
  */
 void MYOSA::printAirQuality(void)
 {
+  if(!_displayReady)
+    return;
   display.clearDisplay();
   display.setTextSize(1);
   display.setTextColor(WHITE);
@@ -834,23 +553,34 @@ void MYOSA::printAirQuality(void)
       {
         display.setFont(&VeraMono7pt7b);
         display.print("eCO2 :");
-        display.print(Aq.getCO2());
+        display.print(Aq.getCO2(true));
         display.println("ppm");
         display.print("TVOC :");
-        display.print(Aq.getTVOC());
+        display.print(Aq.getTVOC(true));
         display.println("ppb");
       }
     }
   }
+  else
+  {
+    Serial.println("Air Quality: Not connected");
+    display.setFont(&VeraMono7pt7b);
+    display.println("Not connected");
+  }
+  Serial.println();
+
   display.display();
+
 }
 
-/**
- *
+/*
+ * Print the pressure page to Serial and the initialized OLED.
  */
 void MYOSA::printBarometricPressure(void)
 {
-  static uint8_t nCnt=0;
+  if(!_displayReady)
+    return;
+  static uint8_t nCnt = 0;
   display.clearDisplay();
   display.setTextSize(1);
   display.setTextColor(WHITE);
@@ -860,43 +590,60 @@ void MYOSA::printBarometricPressure(void)
   if(Pr.ping())
   {
     display.setFont(&VeraMono7pt7b);
-    if(nCnt==0u)
+    if(nCnt == 0u)
     {
       display.print("Temp:");
-      display.print(Pr.getTempC(),1);
+      display.print(Pr.getTempC(true), 1);
+
       drawDegreeSymbol();
       display.println("C");
       display.print("Temp:");
-      display.print(Pr.getTempF(),1);
+      display.print(Pr.getTempF(true), 1);
+
       drawDegreeSymbol();
       display.println("F");
       display.print("Alti:");
-      display.print(Pr.getAltitude(SEA_LEVEL_AVG_PRESSURE),1);
+      display.print(Pr.getAltitude(SEA_LEVEL_AVG_PRESSURE), 1);
+
       display.println("m");
     }
     else
     {
       display.print("Pres:");
-      display.print(Pr.getPressurePascal(),1);
+      display.print(Pr.getPressurePascal(true), 1);
+
       display.println("kPa");
       display.print("Pres:");
-      display.print(Pr.getPressureHg(),1);
+      display.print(Pr.getPressureHg(true), 1);
+
       display.println("mmHg");
       display.print("Pres:");
-      display.print(Pr.getPressureBar(),1);
+      display.print(Pr.getPressureBar(true), 1);
+
       display.println("mbar");
     }
   }
+  else
+  {
+    Serial.println("Barometric Pressure: Not connected");
+    display.setFont(&VeraMono7pt7b);
+    display.println("Not connected");
+  }
+  Serial.println();
+
   display.display();
-  nCnt = (nCnt+1)&1;
+
+  nCnt = (nCnt + 1) & 1;
 }
 
-/**
- *
+/*
+ * Print the light/proximity page to Serial and the initialized OLED.
  */
 void MYOSA::printLightProximityAndGesture(void)
 {
-  static uint8_t nCnt=0;
+  if(!_displayReady)
+    return;
+  static uint8_t nCnt = 0;
   display.clearDisplay();
   display.setTextSize(1);
   display.setTextColor(WHITE);
@@ -906,38 +653,56 @@ void MYOSA::printLightProximityAndGesture(void)
   if(Lpg.ping())
   {
     display.setFont(&VeraMono7pt7b);
-    if(nCnt==0u)
+    if(nCnt == 0u)
     {
       display.print("Ambient:");
-      display.print(Lpg.getAmbientLight());
-      display.println("Lux");
+      const float ambient = Lpg.getAmbientLightLux(true);
+      if(isfinite(ambient))
+      {
+        display.print(ambient, 1);
+        display.println(" lux");
+      }
+      else
+        display.println("--");
       display.print("Proximity:");
-      display.print(Lpg.getProximity(),1);
+      display.print(Lpg.getProximity(true), 1);
       display.println();
     }
     else
     {
+      const uint16_t *rgb = Lpg.getRGBProportion(true);
       display.print("Red  :");
-      display.print(Lpg.getRedProportion());
+      display.print(rgb[0]);
       display.println("%");
       display.print("Green:");
-      display.print(Lpg.getGreenProportion());
+      display.print(rgb[1]);
       display.println("%");
       display.print("Blue :");
-      display.print(Lpg.getBlueProportion());
+      display.print(rgb[2]);
       display.println("%");
     }
   }
+  else
+  {
+    Serial.println("Light, Proximity and Gesture: Not connected");
+    display.setFont(&VeraMono7pt7b);
+    display.println("Not connected");
+  }
+  Serial.println();
+
   display.display();
-  nCnt = (nCnt+1)&1;
+
+  nCnt = (nCnt + 1) & 1;
 }
 
-/**
- *
+/*
+ * Print the temperature/humidity page to Serial and the initialized OLED.
  */
 void MYOSA::printTempAndHumidity(void)
 {
-  static uint8_t nCnt=0;
+  if(!_displayReady)
+    return;
+  static uint8_t nCnt = 0;
   display.clearDisplay();
   display.setTextSize(1);
   display.setTextColor(WHITE);
@@ -947,32 +712,47 @@ void MYOSA::printTempAndHumidity(void)
   if(Th.ping())
   {
     display.setFont(&VeraMono7pt7b);
-    if(nCnt==0u)
+    if(nCnt == 0u)
     {
       display.print("RH  :");
-      display.print(Th.getRelativeHumdity(),1);
+      display.print(Th.getRelativeHumdity(true), 1);
+
       display.println("%");
       display.print("Temp:");
-      display.print(Th.getTempC(),1);
+      display.print(Th.getTempC(true), 1);
+
       drawDegreeSymbol();
       display.println("C");
       display.print("Temp:");
-      display.print(Th.getTempF(),1);
+      display.print(Th.getTempF(true), 1);
+
       drawDegreeSymbol();
       display.println("F");
     }
     else
     {
       display.print("HI :");
-      display.print(Th.getHeatIndexC(),1);
+      display.print(Th.getHeatIndexC(true), 1);
+
       drawDegreeSymbol();
       display.println("C");
       display.print("HI :");
-      display.print(Th.getHeatIndexF(),1);
+      display.print(Th.getHeatIndexF(true), 1);
+
       drawDegreeSymbol();
       display.println("F");
     }
   }
+  else
+  {
+    Serial.println("Temperature and Humidity: Not connected");
+    display.setFont(&VeraMono7pt7b);
+    display.println("Not connected");
+  }
+  Serial.println();
+
   display.display();
-  nCnt = (nCnt+1)&1;
+
+  nCnt = (nCnt + 1) & 1;
 }
+

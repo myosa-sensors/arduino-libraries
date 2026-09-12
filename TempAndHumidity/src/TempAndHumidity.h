@@ -4,11 +4,10 @@
   Existing readily-available libraries would have been used "AS IS" and modified for ease of learning purpose.
 
   Synopsis of Temperature And Humidity Board
-  MYOSA Platform consists of an Temperature And Humidity Board. It is equiped with Si7021 IC.
-  It has ± 3% relative humidity measurements with a range of 0–80% RH, and ±0.4 °C temperature accuracy at a range of -10 to +85 °C.
-  I2C Address of the board = 0x40.
-  Detailed Information about Temperature and Humidity board Library and usage is provided in the link below.
-  Detailed Guide: https://drive.google.com/file/d/1On6kzIq3ejcu9aMGr2ZB690NnFrXG2yO/view
+  The MYOSA temperature and humidity board uses the Si7021 at I2C address 0x40.
+  Temperature is available in Celsius and Fahrenheit; relative humidity is a percentage.
+  Measurements and serial-number bytes are checked using the sensor CRC.
+  Failed floating measurements return NAN.
 
   NOTE
   All information, including URL references, is subject to change without prior notice.
@@ -17,11 +16,11 @@
   "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied
 
   Modifications
-  1 December, 2021 by Pegasus Automation
+  10 September, 2026 by Pegasus Automation
   (as a part of MYOSA Initiative)
  
-  Contact Team MakeSense EduTech for any kind of feedback/issues pertaining to performance or any update request.
-  Email: dev.myosa@gmail.com
+  Contact Team MYOSA for any kind of feedback/issues pertaining to performance or any update request.
+  Email: myosa.event@gmail.com
 */
 
 #ifndef __TEMPANDHUMIDITY_H__
@@ -63,6 +62,11 @@ typedef struct
   uint8_t RES1:1;
 }USER_REG_t;
 
+/*
+ * Initialize Wire before begin(); measurement getters start fresh blocking conversions.
+ * Temperature and heat index use the named C/F units; humidity is percent.
+ * CRC or transfer failures return NAN; serial-number failure returns zero.
+ */
 class TempAndHumidity
 {
   public:

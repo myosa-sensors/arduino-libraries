@@ -1,0 +1,22 @@
+# Syntax highlighting for MYOSA
+MYOSA	KEYWORD1
+begin	KEYWORD2
+drawCentreString	KEYWORD2
+drawDegreeSymbol	KEYWORD2
+drawSubscriptSymbol	KEYWORD2
+drawSuperscriptSymbol	KEYWORD2
+printAceelAndGyro	KEYWORD2
+printAirQuality	KEYWORD2
+printBarometricPressure	KEYWORD2
+printLightProximityAndGesture	KEYWORD2
+printTempAndHumidity	KEYWORD2
+sendBleData	KEYWORD2
+turnOffBuzzer	KEYWORD2
+turnOffRelay	KEYWORD2
+turnOnBuzzer	KEYWORD2
+turnOnRelay	KEYWORD2
+RELAY_IO	LITERAL1
+BUZZER_IO	LITERAL1
+SCREEN_WIDTH	LITERAL1
+SCREEN_HEIGHT	LITERAL1
+OLED_RESET	LITERAL1

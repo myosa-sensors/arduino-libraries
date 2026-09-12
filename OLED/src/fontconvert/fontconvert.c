@@ -22,6 +22,10 @@ See notes at end for glyph nomenclature & other tidbits.
 #include <ft2build.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <limits.h>
+#include FT_MODULE_H
 #include FT_GLYPH_H
 #include FT_TRUETYPE_DRIVER_H
 #include "../gfxfont.h" // Adafruit_GFX font structures
@@ -50,7 +54,8 @@ void enbit(uint8_t value) {
 }
 
 int main(int argc, char *argv[]) {
-  int i, j, err, size, first = ' ', last = '~', bitmapOffset = 0, x, y, byte;
+  int i, j, err, size, first = ' ', last = '~', bitmapOffset = 0, byte;
+  unsigned int x, y;
   char *fontName, c, *ptr;
   FT_Library library;
   FT_Face face;
@@ -67,18 +72,28 @@ int main(int argc, char *argv[]) {
   // Unless overridden, default first and last chars are
   // ' ' (space) and '~', respectively
 
-  if (argc < 3) {
+  if (argc < 3 || argc > 5) {
     fprintf(stderr, "Usage: %s fontfile size [first] [last]\n", argv[0]);
     return 1;
   }
 
-  size = atoi(argv[2]);
+  long parsed[3] = {0, 0, 0};
+  for(i = 2; i < argc; ++i) {
+    char *end;
+    parsed[i - 2] = strtol(argv[i], &end, 10);
+    if(end == argv[i] || *end || parsed[i - 2] < 0 || parsed[i - 2] > 255) {
+      fprintf(stderr, "Numeric arguments must be integers from 0 to 255.\n");
+      return 1;
+    }
+  }
+  size = (int)parsed[0];
+  if(size == 0) { fprintf(stderr, "Font size must be positive.\n"); return 1; }
 
   if (argc == 4) {
-    last = atoi(argv[3]);
+    last = (int)parsed[1];
   } else if (argc == 5) {
-    first = atoi(argv[3]);
-    last = atoi(argv[4]);
+    first = (int)parsed[1];
+    last = (int)parsed[2];
   }
 
   if (last < first) {
@@ -111,7 +126,7 @@ int main(int argc, char *argv[]) {
   sprintf(ptr, "%dpt%db", size, (last > 127) ? 8 : 7);
   // Space and punctuation chars in name replaced w/ underscores.
   for (i = 0; (c = fontName[i]); i++) {
-    if (isspace(c) || ispunct(c))
+    if (isspace((unsigned char)c) || ispunct((unsigned char)c))
       fontName[i] = '_';
   }
 
@@ -136,7 +151,14 @@ int main(int argc, char *argv[]) {
   }
 
   // << 6 because '26dot6' fixed-point format
-  FT_Set_Char_Size(face, size << 6, 0, DPI, 0);
+  if(FT_Set_Char_Size(face, (FT_F26Dot6)size * 64, 0, DPI, 0)) return 1;
+
+  if((face->size->metrics.height >> 6) < 0 || (face->size->metrics.height >> 6) > UINT8_MAX) {
+    fprintf(stderr, "Font line spacing exceeds the GFX limit.\n");
+    FT_Done_Face(face); FT_Done_FreeType(library);
+    free(table); free(fontName);
+    return 1;
+  }
 
   // Currently all symbols from 'first' to 'last' are processed.
   // Fonts may contain WAY more glyphs than that, but this code
@@ -152,30 +174,42 @@ int main(int argc, char *argv[]) {
     // (no wasted pixels) via bitmap struct.
     if ((err = FT_Load_Char(face, i, FT_LOAD_TARGET_MONO))) {
       fprintf(stderr, "Error %d loading char '%c'\n", err, i);
-      continue;
+      FT_Done_Face(face);
+      FT_Done_FreeType(library);
+      free(table); free(fontName);
+      return err;
     }
 
     if ((err = FT_Render_Glyph(face->glyph, FT_RENDER_MODE_MONO))) {
       fprintf(stderr, "Error %d rendering char '%c'\n", err, i);
-      continue;
+      FT_Done_Face(face);
+      FT_Done_FreeType(library);
+      free(table); free(fontName);
+      return err;
     }
 
     if ((err = FT_Get_Glyph(face->glyph, &glyph))) {
       fprintf(stderr, "Error %d getting glyph '%c'\n", err, i);
-      continue;
+      FT_Done_Face(face);
+      FT_Done_FreeType(library);
+      free(table); free(fontName);
+      return err;
     }
 
     bitmap = &face->glyph->bitmap;
     g = (FT_BitmapGlyphRec *)glyph;
 
-    // Minimal font and per-glyph information is stored to
-    // reduce flash space requirements.  Glyph bitmaps are
-    // fully bit-packed; no per-scanline pad, though end of
-    // each character may be padded to next byte boundary
-    // when needed.  16-bit offset means 64K max for bitmaps,
-    // code currently doesn't check for overflow.  (Doesn't
-    // check that size & offsets are within bounds either for
-    // that matter...please convert fonts responsibly.)
+    // Reject glyphs that do not fit the display font format.
+    const unsigned long glyphBytes = ((unsigned long)bitmap->width * bitmap->rows + 7) / 8;
+    if(bitmap->width > UINT8_MAX || bitmap->rows > UINT8_MAX ||
+       (face->glyph->advance.x >> 6) < 0 || (face->glyph->advance.x >> 6) > UINT8_MAX ||
+       g->left < INT8_MIN || g->left > INT8_MAX || 1 - g->top < INT8_MIN || 1 - g->top > INT8_MAX ||
+       bitmapOffset + glyphBytes > UINT16_MAX) {
+      fprintf(stderr, "Glyph or bitmap exceeds the GFX font limits.\n");
+      FT_Done_Glyph(glyph); FT_Done_Face(face); FT_Done_FreeType(library);
+      free(table); free(fontName);
+      return 1;
+    }
     table[j].bitmapOffset = bitmapOffset;
     table[j].width = bitmap->width;
     table[j].height = bitmap->rows;
@@ -239,8 +273,10 @@ int main(int argc, char *argv[]) {
   // Size estimate is based on AVR struct and pointer sizes;
   // actual size may vary.
 
+  FT_Done_Face(face);
   FT_Done_FreeType(library);
-
+  free(table);
+  free(fontName);
   return 0;
 }
 
@@ -288,3 +324,12 @@ fonts (classic fonts unchanged).  See Adafruit_GFX.cpp for explanation.
 */
 
 #endif /* !ARDUINO */
+
+/*
+  Modifications
+  10 September, 2026 by Pegasus Automation
+  (as a part of MYOSA Initiative)
+
+  Contact Team MYOSA for feedback or issues.
+  Email: myosa.event@gmail.com
+*/

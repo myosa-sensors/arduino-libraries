@@ -8,13 +8,11 @@
   Working: Controller board prints (on Serial Monitor) the data of Temperature, Pressure and Altitude every second.  
   
   Synopsis of Barometric Pressure Board
-  MYOSA Platform consists of a Barometric Pressure Board. It is equiped with BMP180 IC which has a pressure sensing range
-  of 300-1100 hPa (9000m to -500m above sea level), with a precision up to 0.03hPa/0.25m resolution.
-  It also have temperature sensing element with -40 to +85°C operational range, ±2°C temperature accuracy.
-  I2C Address of the board = 0x77u.
-  Detailed Information about Barometric Pressure board Library and usage is provided in the link below.
-  Detailed Guide: https://drive.google.com/file/d/1On6kzIq3ejcu9aMGr2ZB690NnFrXG2yO/view
- 
+  The MYOSA pressure board uses the BMP180 sensor at I2C address 0x77.
+  Factory coefficients compensate the temperature and pressure measurements.
+  Pressure is available in kPa, mmHg and mbar, with altitude estimates in metres.
+  Floating measurements return NAN if a transaction or compensation calculation fails.
+
   NOTE
   All information, including URL references, is subject to change without prior notice.
   Please always use the latest versions of software-release for best performance.
@@ -22,11 +20,11 @@
   "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied
 
   Modifications
-  1 December, 2021 by Pegasus Automation
+  10 September, 2026 by Pegasus Automation
   (as a part of MYOSA Initiative)
  
-  Contact Team MakeSense EduTech for any kind of feedback/issues pertaining to performance or any update request.
-  Email: dev.myosa@gmail.com
+  Contact Team MYOSA for any kind of feedback/issues pertaining to performance or any update request.
+  Email: myosa.event@gmail.com
 */
 
 /* Library Inclusion */

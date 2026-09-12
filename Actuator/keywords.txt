@@ -1,34 +1,27 @@
-#######################################
-# Syntax Coloring Map for PCA9536
-#######################################
-
-#######################################
-# Datatypes (KEYWORD1)
-#######################################
-PCA9536					KEYWORD1
-
-#######################################
-# Methods and Functions (KEYWORD2)
-#######################################
-ping					KEYWORD2
-getMode					KEYWORD2
-getState				KEYWORD2
-getPolarity				KEYWORD2
-setMode					KEYWORD2
-setState				KEYWORD2
-toggleState				KEYWORD2
-setPolarity				KEYWORD2
-
-#######################################
-# Constants (LITERAL1)
-#######################################
-IO0						LITERAL1
-IO1						LITERAL1
-IO2						LITERAL1
-IO3						LITERAL1
-IO_OUTPUT				LITERAL1
-IO_INPUT				LITERAL1
-IO_LOW					LITERAL1
-IO_HIGH					LITERAL1
-IO_NON_INVERTED			LITERAL1
-IO_INVERTED				LITERAL1
+# Syntax highlighting for Actuator
+Actuator	KEYWORD1
+getMode	KEYWORD2
+getPolarity	KEYWORD2
+getState	KEYWORD2
+ping	KEYWORD2
+setMode	KEYWORD2
+setPolarity	KEYWORD2
+setState	KEYWORD2
+toggleState	KEYWORD2
+Actuator_I2C_ADDRESS	LITERAL1
+AC_SWITCH_IO	LITERAL1
+BUZZER_IO	LITERAL1
+INPUT_REG	LITERAL1
+OUTPUT_REG	LITERAL1
+POLARITY_REG	LITERAL1
+CONFIG_REG	LITERAL1
+IO0	LITERAL1
+IO1	LITERAL1
+IO2	LITERAL1
+IO3	LITERAL1
+IO_OUTPUT	LITERAL1
+IO_INPUT	LITERAL1
+IO_LOW	LITERAL1
+IO_HIGH	LITERAL1
+IO_NON_INVERTED	LITERAL1
+IO_INVERTED	LITERAL1

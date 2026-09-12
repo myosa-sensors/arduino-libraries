@@ -4,11 +4,10 @@
   Existing readily-available libraries would have been used "AS IS" and modified for ease of learning purpose.
   
   Synopsis of Accelerometer and Gyroscope
-  MYOSA Platform consists of an Accelerometer and Gyroscope Board. It is equiped with GY521/MPU6050 IC.
-  MPU6050 provides a general X/Y/Z direction (3-axis) accelerometer and gyroscope.
-  I2C Address of the board = 0x69.
-  Detailed Information about Accelerometer And Gyroscope board Library and usage is provided in the link below.
-  Detailed Guide: https://drive.google.com/file/d/1On6kzIq3ejcu9aMGr2ZB690NnFrXG2yO/view
+  The MYOSA motion board uses the MPU6050 six-axis sensor at I2C address 0x69.
+  Acceleration is reported in cm/s^2, angular velocity in degrees/s, and tilt in degrees.
+  Temperature is available in Celsius and Fahrenheit; failed measurements return NAN.
+  Optional calibration requires a stationary, level board with +Z pointing upward.
 
   NOTE
   All information, including URL references, is subject to change without prior notice.
@@ -17,17 +16,17 @@
   "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied
 
   Modifications
-  1 December, 2021 by Pegasus Automation
+  10 September, 2026 by Pegasus Automation
   (as a part of MYOSA Initiative)
   
-  Contact Team MakeSense EduTech for any kind of feedback/issues pertaining to performance or any update request.
-  Email: dev.myosa@gmail.com
+  Contact Team MYOSA for any kind of feedback/issues pertaining to performance or any update request.
+  Email: myosa.event@gmail.com
 */
 
 #include "AccelAndGyro.h"
 
-/**
- *
+/*
+ * Initialize the device address and local state before any measurement is requested.
  */
 AccelAndGyro::AccelAndGyro(uint8_t i2c_add)
 {
@@ -37,16 +36,17 @@ AccelAndGyro::AccelAndGyro(uint8_t i2c_add)
 	/* Update the Accelerometer and Gyrometer scale factors */
 	for(uint32_t fsr_sel=0u; fsr_sel < 4u; fsr_sel++)
 	{
-		_gyroScale[fsr_sel] = (250.f*(float)(1u << (fsr_sel+1u)))/32768.f;
-		_accelScale[fsr_sel] = (2.f*9.80665f*(float)(1u << (fsr_sel+1u)))/32768.f;
+		_gyroScale[fsr_sel] = (250.f*(float)(1u << fsr_sel))/32768.f;
+		_accelScale[fsr_sel] = (2.f*9.80665f*(float)(1u << fsr_sel))/32768.f;
 	}
 }
 
-/**
- *
+/*
+ * Configure the default ranges and motion detection; optionally calibrate while stationary.
  */
 bool AccelAndGyro::begin(bool calibrate)
 {
+  _isConnected = false;
 	if(setClkSource(MPU6050_CLOCK_PLL_XGYRO) == false)
 	{
 		return false;
@@ -101,64 +101,39 @@ bool AccelAndGyro::begin(bool calibrate)
 
 bool AccelAndGyro::accelGyroCalibrate(void)
 {
-	float sumAx=0.f,sumAy=0.f,sumAz=0.f;
-	float sumGx=0.f,sumGy=0.f,sumGz=0.f;
-	getAccelX(false);
-	getAccelY(false);
-	getAccelZ(false);
-	getGyroX(false);
-	getGyroY(false);
-	getGyroZ(false);
-	for(uint8_t nReading=0u; nReading < CALIBRATION_READINGS; nReading++)
-	{
-		sumAx += getAccelX(false);
-		sumAy += getAccelY(false);
-		sumAz += getAccelZ(false);
-		sumGx += getGyroX(false);
-		sumGy += getGyroY(false);
-		sumGz += getGyroZ(false);
-		delay_ms(20);
-	}
-	float meanAx, meanAy, meanAz;
-	float meanGx, meanGy, meanGz;
-	meanAx = sumAx/CALIBRATION_READINGS;
-	meanAy = sumAy/CALIBRATION_READINGS;
-	meanAz = sumAz/CALIBRATION_READINGS;
-	meanGx = sumGx/CALIBRATION_READINGS;
-	meanGy = sumGy/CALIBRATION_READINGS;
-	meanGz = sumGz/CALIBRATION_READINGS;
-	Serial.println("Calibrate values");
-	Serial.print("meanAx:");
-	Serial.println(meanAx,2);
-	Serial.print("meanAy:");
-	Serial.println(meanAy,2);
-	Serial.print("meanAx:");
-	Serial.println(meanAz,2);
-	Serial.print("meanAz:");
-	Serial.println(meanGx,2);
-	Serial.print("meanGx:");
-	Serial.println(meanGy,2);
-	Serial.print("meanGz:");
-	Serial.println(meanGz,2);
-	return true;
+  // Keep the sensor stationary and level, with +Z pointing upward.
+  const uint8_t ar = getFullScaleAccelRange(), gr = getFullScaleGyroRange();
+  if(ar > 3 || gr > 3) return false;
+  float acceleration[3] = {}, rotation[3] = {};
+  for(uint8_t n = 0; n < CALIBRATION_READINGS; ++n) {
+    int16_t a[3], g[3];
+    if(!getAccel(&a[0], &a[1], &a[2]) || !getGyro(&g[0], &g[1], &g[2])) return false;
+    for(uint8_t i = 0; i < 3; ++i) {
+      acceleration[i] += a[i] * _accelScale[ar] * 100.f;
+      rotation[i] += g[i] * _gyroScale[gr];
+    }
+    delay_ms(20);
+  }
+  // Commit only after all samples succeed; retain the one-g gravity component.
+  for(uint8_t i = 0; i < 3; ++i) {
+    _accelBias[i] = acceleration[i] / CALIBRATION_READINGS - (i == 2 ? 980.665f : 0.f);
+    _gyroBias[i] = rotation[i] / CALIBRATION_READINGS;
+  }
+  return true;
 }
 
-/**
- *
+/*
+ * Probe the device and restore its default configuration after a disconnect.
  */
 bool AccelAndGyro::ping(void)
 {
-	bool getConnectSts = writeAddress();
-    if(!_isConnected && getConnectSts)
-    {
-      begin();
-    }
-    _isConnected = getConnectSts;
-    return getConnectSts;
+  if(!writeAddress()) { _isConnected = false; return false; }
+  if(!_isConnected) _isConnected = begin();
+  return _isConnected;
 }
 
-/**
- *
+/*
+ * Return the masked WHO_AM_I value, or zero if the register cannot be read.
  */
 uint8_t AccelAndGyro::getDeviceId(void)
 {
@@ -170,11 +145,12 @@ uint8_t AccelAndGyro::getDeviceId(void)
 	return (deviceId & MPU_WHO_AM_I_MSK);
 }
 
-/**
- *
+/*
+ * Request a device reset and invalidate the connection state.
  */
 bool AccelAndGyro::reset(void)
 {
+  _isConnected = false;
 	uint8_t pwrMgmt1Val;
 	if(readByte(MPU6050_PWR_MGMT_1_REG,&pwrMgmt1Val) == false)
 	{
@@ -184,8 +160,8 @@ bool AccelAndGyro::reset(void)
 	return writeByte(MPU6050_PWR_MGMT_1_REG,pwrMgmt1Val);
 }
 
-/**
- *
+/*
+ * Reset the gyroscope signal path without changing the power configuration.
  */
 bool AccelAndGyro::resetGyroPath(void)
 {
@@ -195,11 +171,11 @@ bool AccelAndGyro::resetGyroPath(void)
 		return false;
 	}
 	signalPath |= MPU_SIGNAL_PATH_GYRO_RESET_MSK;
-	return writeByte(MPU6050_PWR_MGMT_1_REG,signalPath);
+	return writeByte(MPU6050_SIGNAL_PATH_RESET_REG,signalPath);
 }
 
-/**
- *
+/*
+ * Reset the accelerometer signal path without changing the power configuration.
  */
 bool AccelAndGyro::resetAccelPath(void)
 {
@@ -209,11 +185,11 @@ bool AccelAndGyro::resetAccelPath(void)
 		return false;
 	}
 	signalPath |= MPU_SIGNAL_PATH_ACCEL_RESET_MSK;
-	return writeByte(MPU6050_PWR_MGMT_1_REG,signalPath);
+	return writeByte(MPU6050_SIGNAL_PATH_RESET_REG,signalPath);
 }
 
-/**
- *
+/*
+ * Reset the temperature signal path without changing the power configuration.
  */
 bool AccelAndGyro::resetTempPath(void)
 {
@@ -223,14 +199,15 @@ bool AccelAndGyro::resetTempPath(void)
 		return false;
 	}
 	signalPath |= MPU_SIGNAL_PATH_TEMP_RESET_MSK;
-	return writeByte(MPU6050_PWR_MGMT_1_REG,signalPath);
+	return writeByte(MPU6050_SIGNAL_PATH_RESET_REG,signalPath);
 }
 
-/**
- *
+/*
+ * Select a gyroscope range code (0-3), preserving unrelated configuration bits.
  */
 bool AccelAndGyro::setFullScaleGyroRange(uint8_t range)
 {
+  if(range > 3) return false;
 	uint8_t gyroConfig;
 	if(readByte(MPU6050_GYRO_CONFIG_REG,&gyroConfig) == false)
 	{
@@ -241,8 +218,8 @@ bool AccelAndGyro::setFullScaleGyroRange(uint8_t range)
 	return writeByte(MPU6050_GYRO_CONFIG_REG,gyroConfig);
 }
 
-/**
- *
+/*
+ * Return the gyroscope range code; 0xFF indicates a failed register read.
  */
 uint8_t AccelAndGyro::getFullScaleGyroRange(void)
 {
@@ -256,11 +233,12 @@ uint8_t AccelAndGyro::getFullScaleGyroRange(void)
 	return range&0x0Fu;
 }
 
-/**
- *
+/*
+ * Select an accelerometer range code (0-3), preserving unrelated configuration bits.
  */
 bool AccelAndGyro::setFullScaleAccelRange(uint8_t range)
 {
+  if(range > 3) return false;
 	uint8_t accelConfig;
 	if(readByte(MPU6050_ACCEL_CONFIG_REG,&accelConfig) == false)
 	{
@@ -271,8 +249,8 @@ bool AccelAndGyro::setFullScaleAccelRange(uint8_t range)
 	return writeByte(MPU6050_ACCEL_CONFIG_REG,accelConfig);
 }
 
-/**
- *
+/*
+ * Return the accelerometer range code; 0xFF indicates a failed register read.
  */
 uint8_t AccelAndGyro::getFullScaleAccelRange(void)
 {
@@ -286,8 +264,8 @@ uint8_t AccelAndGyro::getFullScaleAccelRange(void)
 	return range&0x0Fu;
 }
 
-/**
- *
+/*
+ * Update the sleep enable while preserving unrelated register bits.
  */
 bool AccelAndGyro::setSleep(bool enable)
 {
@@ -304,8 +282,8 @@ bool AccelAndGyro::setSleep(bool enable)
 	return writeByte(MPU6050_PWR_MGMT_1_REG,pwrMgmt1Val);
 }
 
-/**
- *
+/*
+ * Read the sleep enable from the sensor configuration.
  */
 bool AccelAndGyro::getSleepSts(void)
 {
@@ -319,8 +297,8 @@ bool AccelAndGyro::getSleepSts(void)
 	return (bool)sleepState;
 }
 
-/**
- *
+/*
+ * Update the low-power cycle mode while preserving unrelated register bits.
  */
 bool AccelAndGyro::setCycleMode(bool enable)
 {
@@ -337,8 +315,8 @@ bool AccelAndGyro::setCycleMode(bool enable)
 	return writeByte(MPU6050_PWR_MGMT_1_REG,pwrMgmt1Val);
 }
 
-/**
- *
+/*
+ * Read the low-power cycle mode from the sensor configuration.
  */
 bool AccelAndGyro::getCycleMode(void)
 {
@@ -352,8 +330,8 @@ bool AccelAndGyro::getCycleMode(void)
 	return (bool)cycleMode;
 }
 
-/**
- *
+/*
+ * Update the temperature-disable bit while preserving unrelated register bits.
  */
 bool AccelAndGyro::setTempSensorDisable(bool enable)
 {
@@ -370,8 +348,8 @@ bool AccelAndGyro::setTempSensorDisable(bool enable)
 	return writeByte(MPU6050_PWR_MGMT_1_REG,pwrMgmt1Val);
 }
 
-/**
- *
+/*
+ * Read the temperature-disable bit from the sensor configuration.
  */
 bool AccelAndGyro::getTempSensorDisableSts(void)
 {
@@ -385,11 +363,12 @@ bool AccelAndGyro::getTempSensorDisableSts(void)
 	return (bool)cycleMode;
 }
 
-/**
- *
+/*
+ * Update the clock-source code while preserving unrelated register bits.
  */
 bool AccelAndGyro::setClkSource(uint8_t src)
 {
+  if(src > 7 || src == 6) return false;
 	uint8_t pwrMgmt1Val;
 	if(readByte(MPU6050_PWR_MGMT_1_REG,&pwrMgmt1Val) == false)
 	{
@@ -400,8 +379,8 @@ bool AccelAndGyro::setClkSource(uint8_t src)
 	return writeByte(MPU6050_PWR_MGMT_1_REG,pwrMgmt1Val);
 }
 
-/**
- *
+/*
+ * Read the clock-source code from the sensor configuration.
  */
 uint8_t AccelAndGyro::getClkSource(void)
 {
@@ -415,11 +394,12 @@ uint8_t AccelAndGyro::getClkSource(void)
 	return clkSrc;
 }
 
-/**
- *
+/*
+ * Update the wake-frequency code while preserving unrelated register bits.
  */
 bool AccelAndGyro::setWakeFrequency(uint8_t frequency)
 {
+  if(frequency > 3) return false;
 	uint8_t pwrMgmt2Val;
 	if(readByte(MPU6050_PWR_MGMT_2_REG,&pwrMgmt2Val) == false)
 	{
@@ -430,8 +410,8 @@ bool AccelAndGyro::setWakeFrequency(uint8_t frequency)
 	return writeByte(MPU6050_PWR_MGMT_2_REG,pwrMgmt2Val);
 }
 
-/**
- *
+/*
+ * Read the wake-frequency code from the sensor configuration.
  */
 uint8_t AccelAndGyro::getWakeFrequency(void)
 {
@@ -445,8 +425,8 @@ uint8_t AccelAndGyro::getWakeFrequency(void)
 	return frequency;
 }
 
-/**
- *
+/*
+ * Update the X-axis accelerometer standby bit while preserving unrelated register bits.
  */
 bool AccelAndGyro::setStandbyXAccel(bool enable)
 {
@@ -463,8 +443,8 @@ bool AccelAndGyro::setStandbyXAccel(bool enable)
 	return writeByte(MPU6050_PWR_MGMT_2_REG,pwrMgmt2Val);
 }
 
-/**
- *
+/*
+ * Read the X-axis accelerometer standby bit from the sensor configuration.
  */
 bool AccelAndGyro::getStandbyXAccelSts(void)
 {
@@ -478,8 +458,8 @@ bool AccelAndGyro::getStandbyXAccelSts(void)
 	return (bool)standySts;
 }
 
-/**
- *
+/*
+ * Update the Y-axis accelerometer standby bit while preserving unrelated register bits.
  */
 bool AccelAndGyro::setStandbyYAccel(bool enable)
 {
@@ -496,8 +476,8 @@ bool AccelAndGyro::setStandbyYAccel(bool enable)
 	return writeByte(MPU6050_PWR_MGMT_2_REG,pwrMgmt2Val);
 }
 
-/**
- *
+/*
+ * Read the Y-axis accelerometer standby bit from the sensor configuration.
  */
 bool AccelAndGyro::getStandbyYAccelSts(void)
 {
@@ -511,8 +491,8 @@ bool AccelAndGyro::getStandbyYAccelSts(void)
 	return (bool)standySts;
 }
 
-/**
- *
+/*
+ * Update the Z-axis accelerometer standby bit while preserving unrelated register bits.
  */
 bool AccelAndGyro::setStandbyZAccel(bool enable)
 {
@@ -529,8 +509,8 @@ bool AccelAndGyro::setStandbyZAccel(bool enable)
 	return writeByte(MPU6050_PWR_MGMT_2_REG,pwrMgmt2Val);
 }
 
-/**
- *
+/*
+ * Read the Z-axis accelerometer standby bit from the sensor configuration.
  */
 bool AccelAndGyro::getStandbyZAccelSts(void)
 {
@@ -544,8 +524,8 @@ bool AccelAndGyro::getStandbyZAccelSts(void)
 	return (bool)standySts;
 }
 
-/**
- *
+/*
+ * Update the X-axis gyroscope standby bit while preserving unrelated register bits.
  */
 bool AccelAndGyro::setStandbyXGyro(bool enable)
 {
@@ -562,8 +542,8 @@ bool AccelAndGyro::setStandbyXGyro(bool enable)
 	return writeByte(MPU6050_PWR_MGMT_2_REG,pwrMgmt2Val);
 }
 
-/**
- *
+/*
+ * Read the X-axis gyroscope standby bit from the sensor configuration.
  */
 bool AccelAndGyro::getStandbyXGyroSts(void)
 {
@@ -577,8 +557,8 @@ bool AccelAndGyro::getStandbyXGyroSts(void)
 	return (bool)standySts;
 }
 
-/**
- *
+/*
+ * Update the Y-axis gyroscope standby bit while preserving unrelated register bits.
  */
 bool AccelAndGyro::setStandbyYGyro(bool enable)
 {
@@ -595,8 +575,8 @@ bool AccelAndGyro::setStandbyYGyro(bool enable)
 	return writeByte(MPU6050_PWR_MGMT_2_REG,pwrMgmt2Val);
 }
 
-/**
- *
+/*
+ * Read the Y-axis gyroscope standby bit from the sensor configuration.
  */
 bool AccelAndGyro::getStandbyYGyroSts(void)
 {
@@ -610,8 +590,8 @@ bool AccelAndGyro::getStandbyYGyroSts(void)
 	return (bool)standySts;
 }
 
-/**
- *
+/*
+ * Update the Z-axis gyroscope standby bit while preserving unrelated register bits.
  */
 bool AccelAndGyro::setStandbyZGyro(bool enable)
 {
@@ -628,8 +608,8 @@ bool AccelAndGyro::setStandbyZGyro(bool enable)
 	return writeByte(MPU6050_PWR_MGMT_2_REG,pwrMgmt2Val);
 }
 
-/**
- *
+/*
+ * Read the Z-axis gyroscope standby bit from the sensor configuration.
  */
 bool AccelAndGyro::getStandbyZGyroSts(void)
 {
@@ -643,8 +623,8 @@ bool AccelAndGyro::getStandbyZGyroSts(void)
 	return (bool)standySts;
 }
 
-/**
- *
+/*
+ * Read the motion threshold in register counts from the sensor configuration.
  */
 uint8_t AccelAndGyro::getMotionDetectionThreshold(void)
 {
@@ -656,16 +636,16 @@ uint8_t AccelAndGyro::getMotionDetectionThreshold(void)
 	return 0u;
 }
 
-/**
- *
+/*
+ * Update the motion threshold in register counts while preserving unrelated register bits.
  */
 bool AccelAndGyro::setMotionDetectionThreshold(uint8_t threshold)
 {
 	return writeByte(MPU6050_MOTION_THR,threshold);
 }
 
-/**
- *
+/*
+ * Read the motion duration in register counts from the sensor configuration.
  */
 uint8_t AccelAndGyro::getMotionDetectionDuration(void)
 {
@@ -677,16 +657,16 @@ uint8_t AccelAndGyro::getMotionDetectionDuration(void)
 	return 0u;
 }
 
-/**
- *
+/*
+ * Update the motion duration in register counts while preserving unrelated register bits.
  */
 bool AccelAndGyro::setMotionDetectionDuration(uint8_t threshold)
 {
 	return writeByte(MPU6050_MOTION_DUR,threshold);
 }
 
-/**
- *
+/*
+ * Read the zero-motion threshold in register counts from the sensor configuration.
  */
 uint8_t AccelAndGyro::getZeroMotionDetectionThreshold(void)
 {
@@ -698,16 +678,16 @@ uint8_t AccelAndGyro::getZeroMotionDetectionThreshold(void)
 	return 0u;
 }
 
-/**
- *
+/*
+ * Update the zero-motion threshold in register counts while preserving unrelated register bits.
  */
 bool AccelAndGyro::setZeroMotionDetectionThreshold(uint8_t threshold)
 {
 	return writeByte(MPU6050_ZERO_MOTION_THR,threshold);
 }
 
-/**
- *
+/*
+ * Read the zero-motion duration in register counts from the sensor configuration.
  */
 uint8_t AccelAndGyro::getZeroMotionDetectionDuration(void)
 {
@@ -719,16 +699,16 @@ uint8_t AccelAndGyro::getZeroMotionDetectionDuration(void)
 	return 0u;
 }
 
-/**
- *
+/*
+ * Update the zero-motion duration in register counts while preserving unrelated register bits.
  */
 bool  AccelAndGyro::setZeroMotionDetectionDuration(uint8_t threshold)
 {
 	return writeByte(MPU6050_ZERO_MOTION_DUR,threshold);
 }
 
-/**
- *
+/*
+ * Read the motion interrupt enable from the sensor configuration.
  */
 bool AccelAndGyro::getIntMotionEnabled(void)
 {
@@ -742,8 +722,8 @@ bool AccelAndGyro::getIntMotionEnabled(void)
 	return (bool)motionEn;
 }
 
-/**
- *
+/*
+ * Update the motion interrupt enable while preserving unrelated register bits.
  */
 bool AccelAndGyro::setIntMotionEnabled(bool enable)
 {
@@ -761,8 +741,8 @@ bool AccelAndGyro::setIntMotionEnabled(bool enable)
 }
 
 
-/**
- *
+/*
+ * Read the motion bit from interrupt status; false also represents a failed transfer.
  */
 bool AccelAndGyro::getIntMotionStatus(void)
 {
@@ -776,8 +756,8 @@ bool AccelAndGyro::getIntMotionStatus(void)
 	return (bool)motionSts;
 }
 
-/**
- *
+/*
+ * Read the zero-motion interrupt enable from the sensor configuration.
  */
 bool AccelAndGyro::getIntZeroMotionEnabled(void)
 {
@@ -791,8 +771,8 @@ bool AccelAndGyro::getIntZeroMotionEnabled(void)
 	return (bool)zeroMotionEn;
 }
 
-/**
- *
+/*
+ * Update the zero-motion interrupt enable while preserving unrelated register bits.
  */
 bool AccelAndGyro::setIntZeroMotionEnabled(bool enable)
 {
@@ -809,8 +789,8 @@ bool AccelAndGyro::setIntZeroMotionEnabled(bool enable)
 	return writeByte(MPU6050_INT_ENABLE,intEnable);
 }
 
-/**
- *
+/*
+ * Read the zero-motion bit from interrupt status; false also represents a failed transfer.
  */
 bool AccelAndGyro::getIntZeroMotionStatus(void)
 {
@@ -824,225 +804,147 @@ bool AccelAndGyro::getIntZeroMotionStatus(void)
 	return (bool)zeroMotionSts;
 }
 
-/**
- *
+/*
+ * Return calibrated X-axis acceleration in cm/s^2; unavailable readings return NAN.
  */
 float AccelAndGyro::getAccelX(bool print)
 {
-	int8_t data[2u];
-	uint8_t fsrSel;
-	int16_t raw=0;
-	float aX = 0.0f;
-	if(readMultiBytes(MPU6050_ACCEL_XOUT_H_REG,2u,(uint8_t *)data))
-	{
-		raw = (data[0u] << 8)| data[1u];
-	}
-	fsrSel =  getFullScaleAccelRange();
-	if(fsrSel == 0x0Fu)
-	{
-		return 0.0f;
-	}
-	aX = (float)raw * _accelScale[fsrSel] * 100.f;
-	if(print)
-	{
-		Serial.print("Acceleration(X): ");
-		Serial.print(aX,2);
-		Serial.println("cm/s^2");
-	}
-	return aX;
+  uint8_t data[2];
+  if(!readMultiBytes(MPU6050_ACCEL_XOUT_H_REG, sizeof(data), data)) return NAN;
+  const uint8_t range = getFullScaleAccelRange();
+  if(range > 3) return NAN;
+  const int16_t raw = (int16_t)(((uint16_t)data[0] << 8) | data[1]);
+  const float value = raw * _accelScale[range] * 100.f - _accelBias[0];
+  if(print) { Serial.print("Acceleration(X): "); Serial.print(value, 2); Serial.println(" cm/s^2"); }
+  return value;
 }
 
-/**
- *
+/*
+ * Return calibrated Y-axis acceleration in cm/s^2; unavailable readings return NAN.
  */
 float AccelAndGyro::getAccelY(bool print)
 {
-	int8_t data[2u];
-	uint8_t fsrSel;
-	int16_t raw=0;
-	float aY = 0.0f;
-	if(readMultiBytes(MPU6050_ACCEL_YOUT_H_REG,2u,(uint8_t *)data))
-	{
-		raw = (data[0u] << 8)| data[1u];
-	}
-	fsrSel =  getFullScaleAccelRange();
-	if(fsrSel == 0x0Fu)
-	{
-		return 0.0f;
-	}
-	aY = (float)raw * _accelScale[fsrSel] * 100.f;
-	if(print)
-	{
-		Serial.print("Acceleration(Y): ");
-		Serial.print(aY,2);
-		Serial.println("cm/s^2");
-	}
-	return aY;
+  uint8_t data[2];
+  if(!readMultiBytes(MPU6050_ACCEL_YOUT_H_REG, sizeof(data), data)) return NAN;
+  const uint8_t range = getFullScaleAccelRange();
+  if(range > 3) return NAN;
+  const int16_t raw = (int16_t)(((uint16_t)data[0] << 8) | data[1]);
+  const float value = raw * _accelScale[range] * 100.f - _accelBias[1];
+  if(print) { Serial.print("Acceleration(Y): "); Serial.print(value, 2); Serial.println(" cm/s^2"); }
+  return value;
 }
 
-/**
- *
+/*
+ * Return calibrated Z-axis acceleration in cm/s^2; unavailable readings return NAN.
  */
 float AccelAndGyro::getAccelZ(bool print)
 {
-	int8_t data[2u];
-	uint8_t fsrSel;
-	int16_t raw=0;
-	float aZ = 0.0f;
-	if(readMultiBytes(MPU6050_ACCEL_ZOUT_H_REG,2u,(uint8_t *)data))
-	{
-		raw = (data[0u] << 8)| data[1u];
-	}
-	fsrSel =  getFullScaleAccelRange();
-	if(fsrSel == 0x0Fu)
-	{
-		return 0.0f;
-	}
-	aZ = (float)raw * _accelScale[fsrSel] * 100.f;
-	if(print)
-	{
-		Serial.print("Acceleration(Z): ");
-		Serial.print(aZ,2);
-		Serial.println("cm/s^2");
-	}
-	return aZ;
+  uint8_t data[2];
+  if(!readMultiBytes(MPU6050_ACCEL_ZOUT_H_REG, sizeof(data), data)) return NAN;
+  const uint8_t range = getFullScaleAccelRange();
+  if(range > 3) return NAN;
+  const int16_t raw = (int16_t)(((uint16_t)data[0] << 8) | data[1]);
+  const float value = raw * _accelScale[range] * 100.f - _accelBias[2];
+  if(print) { Serial.print("Acceleration(Z): "); Serial.print(value, 2); Serial.println(" cm/s^2"); }
+  return value;
 }
 
-/**
- *
+/*
+ * Return calibrated X-axis angular velocity in deg/s; unavailable readings return NAN.
  */
 float AccelAndGyro::getGyroX(bool print)
 {
-	int8_t data[2u];
-	uint8_t fsrSel;
-	int16_t raw=0;
-	float gX = 0.0f;
-	if(readMultiBytes(MPU6050_GYRO_XOUT_H_REG,2u,(uint8_t *)data))
-	{
-		raw = (data[0u] << 8)| data[1u];
-	}
-	fsrSel =  getFullScaleGyroRange();
-	if(fsrSel == 0x0Fu)
-	{
-		return 0.0f;
-	}
-	gX = (float)raw * _gyroScale[fsrSel];
-	if(print)
-	{
-		Serial.print("Angular Velocity(X): ");
-		Serial.print(gX,2);
-		Serial.println("°/s");
-	}
-	return gX;
+  uint8_t data[2];
+  if(!readMultiBytes(MPU6050_GYRO_XOUT_H_REG, sizeof(data), data)) return NAN;
+  const uint8_t range = getFullScaleGyroRange();
+  if(range > 3) return NAN;
+  const int16_t raw = (int16_t)(((uint16_t)data[0] << 8) | data[1]);
+  const float value = raw * _gyroScale[range] - _gyroBias[0];
+  if(print) { Serial.print("Angular Velocity(X): "); Serial.print(value, 2); Serial.println(" deg/s"); }
+  return value;
 }
 
-/**
- *
+/*
+ * Return calibrated Y-axis angular velocity in deg/s; unavailable readings return NAN.
  */
 float AccelAndGyro::getGyroY(bool print)
 {
-	int8_t data[2u];
-	uint8_t fsrSel;
-	int16_t raw=0;
-	float gY = 0.0f;
-	if(readMultiBytes(MPU6050_GYRO_YOUT_H_REG,2u,(uint8_t *)data))
-	{
-		raw = (data[0u] << 8)| data[1u];
-	}
-	fsrSel =  getFullScaleGyroRange();
-	if(fsrSel == 0x0Fu)
-	{
-		return 0.0f;
-	}
-	gY = (float)raw * _accelScale[fsrSel] * 100.f;
-	if(print)
-	{
-		Serial.print("Angular Velocity(Y): ");
-		Serial.print(gY,2);
-		Serial.println("°/s");
-	}
-	return gY;
+  uint8_t data[2];
+  if(!readMultiBytes(MPU6050_GYRO_YOUT_H_REG, sizeof(data), data)) return NAN;
+  const uint8_t range = getFullScaleGyroRange();
+  if(range > 3) return NAN;
+  const int16_t raw = (int16_t)(((uint16_t)data[0] << 8) | data[1]);
+  const float value = raw * _gyroScale[range] - _gyroBias[1];
+  if(print) { Serial.print("Angular Velocity(Y): "); Serial.print(value, 2); Serial.println(" deg/s"); }
+  return value;
 }
 
-/**
- *
+/*
+ * Return calibrated Z-axis angular velocity in deg/s; unavailable readings return NAN.
  */
 float AccelAndGyro::getGyroZ(bool print)
 {
-	int8_t data[2u];
-	uint8_t fsrSel;
-	int16_t raw=0;
-	float gZ = 0.0f;
-	if(readMultiBytes(MPU6050_GYRO_ZOUT_H_REG,2u,(uint8_t *)data))
-	{
-		raw = (data[0u] << 8)| data[1u];
-	}
-	fsrSel =  getFullScaleGyroRange();
-	if(fsrSel == 0x0Fu)
-	{
-		return 0.0f;
-	}
-	gZ = (float)raw * _gyroScale[fsrSel];
-	if(print)
-	{
-		Serial.print("Angular Velocity(Z): ");
-		Serial.print(gZ,2);
-		Serial.println("°/s");
-	}
-	return gZ;
+  uint8_t data[2];
+  if(!readMultiBytes(MPU6050_GYRO_ZOUT_H_REG, sizeof(data), data)) return NAN;
+  const uint8_t range = getFullScaleGyroRange();
+  if(range > 3) return NAN;
+  const int16_t raw = (int16_t)(((uint16_t)data[0] << 8) | data[1]);
+  const float value = raw * _gyroScale[range] - _gyroBias[2];
+  if(print) { Serial.print("Angular Velocity(Z): "); Serial.print(value, 2); Serial.println(" deg/s"); }
+  return value;
 }
 
-/**
- *
+/*
+ * Read all three signed raw acceleration axes in one transfer; outputs require valid pointers.
  */
 bool AccelAndGyro::getAccel(int16_t *aX, int16_t *aY, int16_t *aZ)
 {
-	int8_t accel[6u];
+	uint8_t accel[6u];
 	if(readMultiBytes(MPU6050_ACCEL_XOUT_H_REG,6u,(uint8_t *)accel))
 	{
-		*aX = (accel[0u] << 8)| accel[1u];
-		*aY = (accel[2u] << 8)| accel[3u];
-		*aZ = (accel[4u] << 8)| accel[5u];
+		*aX = (int16_t)(((uint16_t)accel[0u] << 8u) | accel[1u]);
+		*aY = (int16_t)(((uint16_t)accel[2u] << 8u) | accel[3u]);
+		*aZ = (int16_t)(((uint16_t)accel[4u] << 8u) | accel[5u]);
 		return true;
 	}
 	return false;
 }
 
-/**
- *
+/*
+ * Read all three signed raw angular-rate axes in one transfer; outputs require valid pointers.
  */
 bool AccelAndGyro::getGyro(int16_t *gX, int16_t *gY, int16_t *gZ)
 {
-	int8_t gyro[6u];
+	uint8_t gyro[6u];
 	if(readMultiBytes(MPU6050_GYRO_XOUT_H_REG,6u,(uint8_t *)gyro))
 	{
-		*gX = (gyro[0u] << 8)| gyro[1u];
-		*gY = (gyro[2u] << 8)| gyro[3u];
-		*gZ = (gyro[4u] << 8)| gyro[5u];
+		*gX = (int16_t)(((uint16_t)gyro[0u] << 8u) | gyro[1u]);
+		*gY = (int16_t)(((uint16_t)gyro[2u] << 8u) | gyro[3u]);
+		*gZ = (int16_t)(((uint16_t)gyro[4u] << 8u) | gyro[5u]);
 		return true;
 	}
 	return false;
 }
 
 
-/**
- *
+/*
+ * Read the three hardware acceleration offset words into caller-provided storage.
  */
 bool AccelAndGyro::getAccelOffset(int16_t *aX, int16_t *aY, int16_t *aZ)
 {
-	int8_t data[6u];
+	uint8_t data[6u];
 	if(readMultiBytes(MPU6050_XA_OFFS_USRH_REG,6u,(uint8_t *)data))
 	{
-		*aX = (data[0u] << 8)| data[1u];
-		*aY = (data[2u] << 8)| data[3u];
-		*aZ = (data[4u] << 8)| data[5u];
+		*aX = (int16_t)(((uint16_t)data[0u] << 8u) | data[1u]);
+		*aY = (int16_t)(((uint16_t)data[2u] << 8u) | data[3u]);
+		*aZ = (int16_t)(((uint16_t)data[4u] << 8u) | data[5u]);
 		return true;
 	}
 	return false;
 }
 
-/**
- *
+/*
+ * Write the three hardware offset words; these are separate from software calibration biases.
  */
 bool AccelAndGyro::setAccelOffset(int16_t *aX, int16_t *aY, int16_t *aZ)
 {
@@ -1061,24 +963,24 @@ bool AccelAndGyro::setAccelOffset(int16_t *aX, int16_t *aY, int16_t *aZ)
 	return false;
 }
 
-/**
- *
+/*
+ * Read the three hardware gyroscope offset words into caller-provided storage.
  */
 bool AccelAndGyro::getGyroOffset(int16_t *gX, int16_t *gY, int16_t *gZ)
 {
-	int8_t data[6u];
+	uint8_t data[6u];
 	if(readMultiBytes(MPU6050_XG_OFFS_USRH_REG,6u,(uint8_t *)data))
 	{
-		*gX = (data[0u] << 8)| data[1u];
-		*gY = (data[2u] << 8)| data[3u];
-		*gZ = (data[4u] << 8)| data[5u];
+		*gX = (int16_t)(((uint16_t)data[0u] << 8u) | data[1u]);
+		*gY = (int16_t)(((uint16_t)data[2u] << 8u) | data[3u]);
+		*gZ = (int16_t)(((uint16_t)data[4u] << 8u) | data[5u]);
 		return true;
 	}
 	return false;
 }
 
-/**
- *
+/*
+ * Write the three hardware gyroscope offset words from caller-provided storage.
  */
 bool AccelAndGyro::setGyroOffset(int16_t *gX, int16_t *gY, int16_t *gZ)
 {
@@ -1097,17 +999,17 @@ bool AccelAndGyro::setGyroOffset(int16_t *gX, int16_t *gY, int16_t *gZ)
 	return false;
 }
 
-/**
- *
+/*
+ * Read the sensor die temperature in Celsius; return NAN on transfer failure.
  */
 float AccelAndGyro::getTempC(bool print)
 {
-	int8_t data[2u];
+	uint8_t data[2u];
 	int16_t temp;
 	float tempC;
-	if(readMultiBytes(MPU6050_TEMP_OUT_H_REG,6u,(uint8_t *)data))
+	if(readMultiBytes(MPU6050_TEMP_OUT_H_REG,2u,(uint8_t *)data))
 	{
-		temp 	= (data[0u] << 8u) | data[1u] ;
+		temp 	= (int16_t)(((uint16_t)data[0u] << 8u) | data[1u]) ;
 		tempC 	= ((float)temp/340.f)+36.53f;
 		if(print)
 		{
@@ -1117,11 +1019,11 @@ float AccelAndGyro::getTempC(bool print)
 		}
 		return tempC;
 	}
-	return 0.f;
+	return NAN;
 }
 
-/**
- *
+/*
+ * Convert a fresh die-temperature reading to Fahrenheit; preserve NAN on failure.
  */
 float AccelAndGyro::getTempF(bool print)
 {
@@ -1135,89 +1037,78 @@ float AccelAndGyro::getTempF(bool print)
 	return tempF;
 }
 
-/**
- *
+/*
+ * Return calibrated X-axis tilt in degrees; unavailable readings return NAN.
  */
 float AccelAndGyro::getTiltX(bool print)
 {
-	float tiltX;
-	int16_t aX, aY, aZ;
-
-	getAccel(&aX,&aY,&aZ);
-	tiltX = (180.0/M_PI)*atan(aX/(sqrt(pow(aY,2)+pow(aZ,2))));
-
-	if(print)
-    {
-      Serial.print("Tilt Angle(X): ");
-      Serial.print(tiltX,2);
-      Serial.println("°");
-    }
-	return tiltX;
+  int16_t a[3];
+  if(!getAccel(&a[0], &a[1], &a[2])) return NAN;
+  const uint8_t range = getFullScaleAccelRange();
+  if(range > 3) return NAN;
+  const float scale = _accelScale[range] * 100.f;
+  const float x = a[0] * scale - _accelBias[0];
+  const float y = a[1] * scale - _accelBias[1];
+  const float z = a[2] * scale - _accelBias[2];
+  if(x == 0 && y == 0 && z == 0) return NAN;
+  const float angle = atan2f(x, sqrtf(y*y + z*z)) * 180.f / M_PI;
+  if(print) { Serial.print("Tilt Angle(X): "); Serial.print(angle, 2); Serial.println(" deg"); }
+  return angle;
 }
 
-/**
- *
+/*
+ * Return calibrated Y-axis tilt in degrees; unavailable readings return NAN.
  */
 float AccelAndGyro::getTiltY(bool print)
 {
-	float tiltY;
-	int16_t aX, aY, aZ;
-
-	getAccel(&aX,&aY,&aZ);
-	tiltY = (180.0/M_PI)*atan(aY/(sqrt(pow(aX,2)+pow(aZ,2))));
-
-	if(print)
-    {
-      Serial.print("Tilt Angle(Y): ");
-      Serial.print(tiltY,2);
-      Serial.println("°");
-    }
-	return tiltY;
+  int16_t a[3];
+  if(!getAccel(&a[0], &a[1], &a[2])) return NAN;
+  const uint8_t range = getFullScaleAccelRange();
+  if(range > 3) return NAN;
+  const float scale = _accelScale[range] * 100.f;
+  const float x = a[0] * scale - _accelBias[0];
+  const float y = a[1] * scale - _accelBias[1];
+  const float z = a[2] * scale - _accelBias[2];
+  if(x == 0 && y == 0 && z == 0) return NAN;
+  const float angle = atan2f(y, sqrtf(x*x + z*z)) * 180.f / M_PI;
+  if(print) { Serial.print("Tilt Angle(Y): "); Serial.print(angle, 2); Serial.println(" deg"); }
+  return angle;
 }
 
-/**
- *
+/*
+ * Return calibrated Z-axis tilt in degrees; unavailable readings return NAN.
  */
 float AccelAndGyro::getTiltZ(bool print)
 {
-	float tiltZ;
-	int16_t aX, aY, aZ;
-
-	getAccel(&aX,&aY,&aZ);
-	tiltZ = (180.0/M_PI)*atan((sqrt(pow(aX,2)+pow(aY,2))/aZ));
-
-	if(print)
-    {
-      Serial.print("Tilt Angle(Z): ");
-      Serial.print(tiltZ,2);
-      Serial.println("°");
-    }
-	return tiltZ;
+  int16_t a[3];
+  if(!getAccel(&a[0], &a[1], &a[2])) return NAN;
+  const uint8_t range = getFullScaleAccelRange();
+  if(range > 3) return NAN;
+  const float scale = _accelScale[range] * 100.f;
+  const float x = a[0] * scale - _accelBias[0];
+  const float y = a[1] * scale - _accelBias[1];
+  const float z = a[2] * scale - _accelBias[2];
+  if(x == 0 && y == 0 && z == 0) return NAN;
+  const float angle = atan2f(sqrtf(x*x + y*y), z) * 180.f / M_PI;
+  if(print) { Serial.print("Tilt Angle(Z): "); Serial.print(angle, 2); Serial.println(" deg"); }
+  return angle;
 }
 
-/**
- *
+/*
+ * Read the motion interrupt flag and optionally print it; false also represents a read failure.
  */
 bool AccelAndGyro::getMotionStatus(bool print)
 {
-	bool motionSts = getIntMotionStatus();
-	Serial.print("Motion Detection Status: ");
-	if(motionSts)
-	{
-		 Serial.println("True");
-	}
-	else
-	{
-		Serial.println("False");
-	}
-	return motionSts;
+  const bool motion = getIntMotionStatus();
+  if(print) { Serial.print("Motion Detection Status: "); Serial.println(motion ? "True" : "False"); }
+  return motion;
 }
 
 /***********************************************************************************************
  * Platform dependent routines. Change these functions implementation based on microcontroller *
  ***********************************************************************************************/
-/**
- *
+/*
+ * Initialize the shared Wire bus at 100 kHz; normal sketches configure Wire before using drivers.
  */
 void AccelAndGyro::i2c_init(void)
 {
@@ -1225,8 +1116,8 @@ void AccelAndGyro::i2c_init(void)
 	Wire.setClock(100000);
 }
 
-/**
- *
+/*
+ * Select one register and require a complete one-byte response.
  */
 bool AccelAndGyro::readByte(uint8_t reg, uint8_t *in)
 {
@@ -1245,8 +1136,8 @@ bool AccelAndGyro::readByte(uint8_t reg, uint8_t *in)
 	return true;
  }
 
-/**
- *
+/*
+ * Select the starting register and read the requested number of bytes.
  */
 bool AccelAndGyro::readMultiBytes(uint8_t reg, uint8_t length, uint8_t *in)
 {
@@ -1269,8 +1160,8 @@ bool AccelAndGyro::readMultiBytes(uint8_t reg, uint8_t length, uint8_t *in)
    return true;
 }
 
-/**
- *
+/*
+ * Send a register/command byte and report the transfer result.
  */
 bool AccelAndGyro::writeByte(uint8_t reg)
 {
@@ -1283,8 +1174,8 @@ bool AccelAndGyro::writeByte(uint8_t reg)
    return false;
 }
 
-/**
- *
+/*
+ * Send a register/command byte and its value and report the transfer result.
  */
 bool AccelAndGyro::writeByte(uint8_t reg, uint8_t val)
 {
@@ -1298,8 +1189,8 @@ bool AccelAndGyro::writeByte(uint8_t reg, uint8_t val)
    return false;
 }
 
-/**
- *
+/*
+ * Probe the I2C address without sending register data.
  */
 bool AccelAndGyro::writeAddress(void)
 {
@@ -1311,8 +1202,8 @@ bool AccelAndGyro::writeAddress(void)
    return false;
 }
 
-/**
- *
+/*
+ * Write consecutive bytes starting at the selected register and report the transfer result.
  */
 bool AccelAndGyro::writeMultiBytes(uint8_t reg, uint8_t length, const uint8_t *in)
 {
@@ -1326,8 +1217,8 @@ bool AccelAndGyro::writeMultiBytes(uint8_t reg, uint8_t length, const uint8_t *i
   return false;
 }
 
-/**
- *
+/*
+ * Wait for the requested number of milliseconds using the Arduino platform delay.
  */
 void AccelAndGyro::delay_ms(uint16_t ms)
 {

@@ -8,12 +8,11 @@
   Working: Controller board prints (on Serial Monitor) the gesture detected continuously.
   
   Synopsis of Light Proximity and Gesture Board
-  MYOSA Platform consists of an Light Proximity and Gesture Board. It is equiped with APDS9960 IC.
-  It is a digital RGB, ambient light, proximity and gesture sensor device with I2C compatible interface.
-  I2C Address of the board = 0x39.
-  Detailed Information about Light Proximity and Gesture board Library and usage is provided in the link below.
-  Detailed Guide: https://drive.google.com/file/d/1On6kzIq3ejcu9aMGr2ZB690NnFrXG2yO/view
- 
+  The MYOSA light and gesture board uses the APDS9960 sensor at I2C address 0x39.
+  Ambient light is reported as raw counts, RGB as percentages, and proximity as raw counts.
+  Gesture sensing reports direction, near/far motion and timeout status.
+  Successful configuration settings are restored when the board reconnects.
+
   NOTE
   All information, including URL references, is subject to change without prior notice.
   Please always use the latest versions of software-release for best performance.
@@ -21,11 +20,11 @@
   "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied
 
   Modifications
-  1 December, 2021 by Pegasus Automation
+  10 September, 2026 by Pegasus Automation
   (as a part of MYOSA Initiative)
  
-  Contact Team MakeSense EduTech for any kind of feedback/issues pertaining to performance or any update request.
-  Email: dev.myosa@gmail.com
+  Contact Team MYOSA for any kind of feedback/issues pertaining to performance or any update request.
+  Email: myosa.event@gmail.com
 */
 
 /* Library Inclusion */

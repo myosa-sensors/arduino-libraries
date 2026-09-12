@@ -8,11 +8,9 @@
   Working: Controller board prints (on Serial Monitor) the data of Total Volatile Organic Compounds (TVOCs) and equivalent carbon dioxide (eCO2) every second.
 
   Synopsis of Air Quality
-  MYOSA Platform consists of an environmental Air Quality Board. It is equiped with CCS811 IC.
-  It is a digital gas sesnor that senses wide range of TVOCs and eCO2. It is is intended for indoor air quality monitoring purposes.
-  I2C Address of the board = 0x5B.
-  Detailed Information about Air Quality board Library and usage is provided in the link below.
-  Detailed Guide: https://drive.google.com/file/d/1On6kzIq3ejcu9aMGr2ZB690NnFrXG2yO/view
+  The MYOSA air-quality board uses the CCS811 to report eCO2 (ppm) and TVOC (ppb).
+  The default I2C address is 0x5B; select 0x5A when the hardware address pin requires it.
+  Read algorithm results when data is ready; hasReading() reports valid cached data.
 
   NOTE
   All information, including URL references, is subject to change without prior notice.
@@ -21,11 +19,11 @@
   "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied
 
   Modifications
-  1 December, 2021 by Pegasus Automation
+  10 September, 2026 by Pegasus Automation
   (as a part of MYOSA Initiative)
   
-  Contact Team MakeSense EduTech for any kind of feedback/issues pertaining to performance or any update request.
-  Email: dev.myosa@gmail.com
+  Contact Team MYOSA for any kind of feedback/issues pertaining to performance or any update request.
+  Email: myosa.event@gmail.com
 */
 
 /* Library Inclusion */

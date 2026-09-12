@@ -4,11 +4,10 @@
   Existing readily-available libraries would have been used "AS IS" and modified for ease of learning purpose.
   
   Synopsis of Accelerometer and Gyroscope
-  MYOSA Platform consists of an Accelerometer and Gyroscope Board. It is equiped with GY521/MPU6050 IC.
-  MPU6050 provides a general X/Y/Z direction (3-axis) accelerometer and gyroscope.
-  I2C Address of the board = 0x69.
-  Detailed Information about Accelerometer And Gyroscope board Library and usage is provided in the link below.
-  Detailed Guide: https://drive.google.com/file/d/1On6kzIq3ejcu9aMGr2ZB690NnFrXG2yO/view
+  The MYOSA motion board uses the MPU6050 six-axis sensor at I2C address 0x69.
+  Acceleration is reported in cm/s^2, angular velocity in degrees/s, and tilt in degrees.
+  Temperature is available in Celsius and Fahrenheit; failed measurements return NAN.
+  Optional calibration requires a stationary, level board with +Z pointing upward.
 
   NOTE
   All information, including URL references, is subject to change without prior notice.
@@ -17,11 +16,11 @@
   "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied
 
   Modifications
-  1 December, 2021 by Pegasus Automation
+  10 September, 2026 by Pegasus Automation
   (as a part of MYOSA Initiative)
   
-  Contact Team MakeSense EduTech for any kind of feedback/issues pertaining to performance or any update request.
-  Email: dev.myosa@gmail.com
+  Contact Team MYOSA for any kind of feedback/issues pertaining to performance or any update request.
+  Email: myosa.event@gmail.com
 */
 
 #ifndef __ACCELANDGYRO_H__
@@ -171,6 +170,11 @@
 #define MPU_WHO_AM_I_MSK                    0x7Eu
 #define CALIBRATION_READINGS                50u
 
+/*
+ * Initialize Wire before begin(); optional calibration requires a stationary, level sensor.
+ * Acceleration is cm/s^2, angular velocity is deg/s, and tilt is degrees.
+ * Floating measurements return NAN on failure; raw/offset output pointers must be valid.
+ */
 class AccelAndGyro
 {
   public:
@@ -237,6 +241,8 @@ class AccelAndGyro
       float getTiltZ(bool print=true);
       bool getMotionStatus(bool print=true);
   private:
+      float _accelBias[3] = {};
+      float _gyroBias[3] = {};
       float _accelScale[4u];
       float _gyroScale[4u];
       uint8_t _i2cSlaveAddress;

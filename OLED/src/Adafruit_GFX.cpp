@@ -63,7 +63,7 @@ POSSIBILITY OF SUCH DAMAGE.
 #endif
 
 inline GFXglyph *pgm_read_glyph_ptr(const GFXfont *gfxFont, uint8_t c) {
-#ifdef __AVR__
+  #ifdef __AVR__
   return &(((GFXglyph *)pgm_read_pointer(&gfxFont->glyph))[c]);
 #else
   // expression in __AVR__ section may generate "dereferencing type-punned
@@ -75,7 +75,7 @@ inline GFXglyph *pgm_read_glyph_ptr(const GFXfont *gfxFont, uint8_t c) {
 }
 
 inline uint8_t *pgm_read_bitmap_ptr(const GFXfont *gfxFont) {
-#ifdef __AVR__
+  #ifdef __AVR__
   return (uint8_t *)pgm_read_pointer(&gfxFont->bitmap);
 #else
   // expression in __AVR__ section generates "dereferencing type-punned pointer
@@ -131,7 +131,7 @@ Adafruit_GFX::Adafruit_GFX(int16_t w, int16_t h) : WIDTH(w), HEIGHT(h) {
 /**************************************************************************/
 void Adafruit_GFX::writeLine(int16_t x0, int16_t y0, int16_t x1, int16_t y1,
                              uint16_t color) {
-#if defined(ESP8266)
+  #if defined(ESP8266)
   yield();
 #endif
   int16_t steep = abs(y1 - y0) > abs(x1 - x0);
@@ -356,7 +356,7 @@ void Adafruit_GFX::drawLine(int16_t x0, int16_t y0, int16_t x1, int16_t y1,
 /**************************************************************************/
 void Adafruit_GFX::drawCircle(int16_t x0, int16_t y0, int16_t r,
                               uint16_t color) {
-#if defined(ESP8266)
+  #if defined(ESP8266)
   yield();
 #endif
   int16_t f = 1 - r;
@@ -1481,9 +1481,7 @@ void Adafruit_GFX::getTextBounds(const char *str, int16_t x, int16_t y,
 void Adafruit_GFX::getTextBounds(const String &str, int16_t x, int16_t y,
                                  int16_t *x1, int16_t *y1, uint16_t *w,
                                  uint16_t *h) {
-  if (str.length() != 0) {
-    getTextBounds(const_cast<char *>(str.c_str()), x, y, x1, y1, w, h);
-  }
+  getTextBounds(str.c_str(), x, y, x1, y1, w, h);
 }
 
 /**************************************************************************/
@@ -1540,7 +1538,11 @@ void Adafruit_GFX::invertDisplay(boolean i) {
    @brief    Create a simple drawn button UI element
 */
 /**************************************************************************/
-Adafruit_GFX_Button::Adafruit_GFX_Button(void) { _gfx = 0; }
+Adafruit_GFX_Button::Adafruit_GFX_Button(void) {
+  _gfx = nullptr;
+  currstate = laststate = false;
+  _label[0] = '\0';
+}
 
 /**************************************************************************/
 /*!
@@ -1651,7 +1653,9 @@ void Adafruit_GFX_Button::initButtonUL(Adafruit_GFX *gfx, int16_t x1,
   _textsize_x = textsize_x;
   _textsize_y = textsize_y;
   _gfx = gfx;
-  strncpy(_label, label, 9);
+  strncpy(_label, label ? label : "", sizeof(_label) - 1);
+  _label[sizeof(_label) - 1] = '\0';
+  currstate = laststate = false;
 }
 
 /**************************************************************************/
@@ -1662,6 +1666,7 @@ void Adafruit_GFX_Button::initButtonUL(Adafruit_GFX *gfx, int16_t x1,
 */
 /**************************************************************************/
 void Adafruit_GFX_Button::drawButton(boolean inverted) {
+  if(!_gfx) return;
   uint16_t fill, outline, text;
 
   if (!inverted) {
@@ -1744,7 +1749,7 @@ boolean Adafruit_GFX_Button::justReleased() {
 */
 /**************************************************************************/
 GFXcanvas1::GFXcanvas1(uint16_t w, uint16_t h) : Adafruit_GFX(w, h) {
-  uint16_t bytes = ((w + 7) / 8) * h;
+  uint32_t bytes = (((uint32_t)w + 7) / 8) * h;
   if ((buffer = (uint8_t *)malloc(bytes))) {
     memset(buffer, 0, bytes);
   }
@@ -1769,7 +1774,7 @@ GFXcanvas1::~GFXcanvas1(void) {
 */
 /**************************************************************************/
 void GFXcanvas1::drawPixel(int16_t x, int16_t y, uint16_t color) {
-#ifdef __AVR__
+  #ifdef __AVR__
   // Bitmask tables of 0x80>>X and ~(0x80>>X), because X>>Y is slow on AVR
   static const uint8_t PROGMEM GFXsetBit[] = {0x80, 0x40, 0x20, 0x10,
                                               0x08, 0x04, 0x02, 0x01},
@@ -1822,7 +1827,7 @@ void GFXcanvas1::drawPixel(int16_t x, int16_t y, uint16_t color) {
 /**************************************************************************/
 void GFXcanvas1::fillScreen(uint16_t color) {
   if (buffer) {
-    uint16_t bytes = ((WIDTH + 7) / 8) * HEIGHT;
+    uint32_t bytes = (((uint32_t)WIDTH + 7) / 8) * HEIGHT;
     memset(buffer, color ? 0xFF : 0x00, bytes);
   }
 }
@@ -1835,7 +1840,7 @@ void GFXcanvas1::fillScreen(uint16_t color) {
 */
 /**************************************************************************/
 GFXcanvas8::GFXcanvas8(uint16_t w, uint16_t h) : Adafruit_GFX(w, h) {
-  uint32_t bytes = w * h;
+  uint32_t bytes = (uint32_t)w * h;
   if ((buffer = (uint8_t *)malloc(bytes))) {
     memset(buffer, 0, bytes);
   }
@@ -1900,40 +1905,13 @@ void GFXcanvas8::fillScreen(uint16_t color) {
 
 void GFXcanvas8::writeFastHLine(int16_t x, int16_t y, int16_t w,
                                 uint16_t color) {
-
-  if ((x >= _width) || (y < 0) || (y >= _height))
-    return;
-  int16_t x2 = x + w - 1;
-  if (x2 < 0)
-    return;
-
-  // Clip left/right
-  if (x < 0) {
-    x = 0;
-    w = x2 + 1;
-  }
-  if (x2 >= _width)
-    w = _width - x;
-
-  int16_t t;
-  switch (rotation) {
-  case 1:
-    t = x;
-    x = WIDTH - 1 - y;
-    y = t;
-    break;
-  case 2:
-    x = WIDTH - 1 - x;
-    y = HEIGHT - 1 - y;
-    break;
-  case 3:
-    t = x;
-    x = y;
-    y = HEIGHT - 1 - t;
-    break;
-  }
-
-  memset(buffer + y * WIDTH + x, color, w);
+  if(!buffer || w <= 0 || y < 0 || y >= _height || x >= _width) return;
+  const int32_t end = (int32_t)x + w;
+  if(end <= 0) return;
+  const int16_t left = x < 0 ? 0 : x;
+  const int16_t right = end > _width ? _width : end;
+  if(rotation == 0) memset(buffer + (uint32_t)y * WIDTH + left, color, right - left);
+  else for(int16_t px = left; px < right; ++px) drawPixel(px, y, color);
 }
 
 /**************************************************************************/
@@ -1944,7 +1922,7 @@ void GFXcanvas8::writeFastHLine(int16_t x, int16_t y, int16_t w,
 */
 /**************************************************************************/
 GFXcanvas16::GFXcanvas16(uint16_t w, uint16_t h) : Adafruit_GFX(w, h) {
-  uint32_t bytes = w * h * 2;
+  uint32_t bytes = (uint32_t)w * h * 2;
   if ((buffer = (uint16_t *)malloc(bytes))) {
     memset(buffer, 0, bytes);
   }
@@ -2034,3 +2012,12 @@ void GFXcanvas16::byteSwap(void) {
       buffer[i] = __builtin_bswap16(buffer[i]);
   }
 }
+
+/*
+  Modifications
+  10 September, 2026 by Pegasus Automation
+  (as a part of MYOSA Initiative)
+
+  Contact Team MYOSA for feedback or issues.
+  Email: myosa.event@gmail.com
+*/

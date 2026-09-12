@@ -4,11 +4,9 @@
   Existing readily-available libraries would have been used "AS IS" and modified for ease of learning purpose.
 
   Synopsis of Air Quality
-  MYOSA Platform consists of an environmental Air Quality Board. It is equiped with CCS811 IC.
-  It is a digital gas sesnor that senses wide range of TVOCs and eCO2. It is is intended for indoor air quality monitoring purposes.
-  I2C Address of the board = 0x5B.
-  Detailed Information about Air Quality board Library and usage is provided in the link below.
-  Detailed Guide: https://drive.google.com/file/d/1On6kzIq3ejcu9aMGr2ZB690NnFrXG2yO/view
+  The MYOSA air-quality board uses the CCS811 to report eCO2 (ppm) and TVOC (ppb).
+  The default I2C address is 0x5B; select 0x5A when the hardware address pin requires it.
+  Read algorithm results when data is ready; hasReading() reports valid cached data.
 
   NOTE
   All information, including URL references, is subject to change without prior notice.
@@ -17,30 +15,32 @@
   "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied
 
   Modifications
-  1 December, 2021 by Pegasus Automation
+  10 September, 2026 by Pegasus Automation
   (as a part of MYOSA Initiative)
   
-  Contact Team MakeSense EduTech for any kind of feedback/issues pertaining to performance or any update request.
-  Email: dev.myosa@gmail.com
+  Contact Team MYOSA for any kind of feedback/issues pertaining to performance or any update request.
+  Email: myosa.event@gmail.com
 */
 
 #include "AirQuality.h"
 
-/**
- *
+/*
+ * Initialize the device address and local state before any measurement is requested.
  */
 AirQuality::AirQuality(uint8_t i2c_add, float refRes)
 {
-  _i2cSlaveAddress = 0x5Au;
-  _refResistance   = refRes;
+  _i2cSlaveAddress = i2c_add;
+  _refResistance   = (isfinite(refRes) && refRes > 0) ? refRes : 10000.f;
   _isConnected     = false;
 }
 
-/**
- *
+/*
+ * Reset and verify the CCS811, start its application, and select drive mode 1.
  */
 CCS811_STATUS_t AirQuality::begin(void)
 {
+  _isConnected = false;
+  _hasReading = false;
   CCS811_STATUS_t result;
 
   /* make soft-reset the chip */
@@ -96,55 +96,53 @@ CCS811_STATUS_t AirQuality::begin(void)
   return SENSOR_SUCCESS;
 }
 
-/**
- *
+/*
+ * Send the software-reset sequence and invalidate previously cached algorithm readings.
  */
 CCS811_STATUS_t AirQuality::reset(void)
 {
+  _isConnected = false;
+  _hasReading = false;
+  _CO2 = _tVOC = 0;
   const uint8_t seq[] = {0x11u, 0xE5u, 0x72u, 0x8Au};
   return writeMultiBytes(CCS811_SOFT_RESET_REG,sizeof(seq),seq);
 }
 
-/**
- *
+/*
+ * Probe the device and reinitialize it when the previous connection was lost.
  */
 bool AirQuality::ping(void)
 {
-  bool getConnectSts = writeAddress();
-  if(!_isConnected && getConnectSts)
-  {
-    begin();
-  }
-  _isConnected = getConnectSts;
-  return getConnectSts;
-}
-
-/**
-  *
-  */
-CCS811_STATUS_t AirQuality::readAlgorithmResults(void)
-{
-  uint8_t data[4u];
-  CCS811_STATUS_t result = readMultiBytes(CCS811_ALG_RESULT_DATA_REG,4u,data);
-  if(result != SENSOR_SUCCESS)
-  {
-    return result;
-  }
-  _CO2 = ((uint16_t)data[0] << 8) | data[1];
-  _tVOC = ((uint16_t)data[2] << 8) | data[3];
-  return result;
+  if(!writeAddress()) { _isConnected = false; _hasReading = false; return false; }
+  if(!_isConnected) _isConnected = (begin() == SENSOR_SUCCESS);
+  return _isConnected;
 }
 
 /*
- *
+ * Update cached eCO2/TVOC only after a complete, error-free algorithm-result transfer.
+ */
+CCS811_STATUS_t AirQuality::readAlgorithmResults(void)
+{
+  uint8_t data[8];
+  const CCS811_STATUS_t result = readMultiBytes(CCS811_ALG_RESULT_DATA_REG, sizeof(data), data);
+  if(result != SENSOR_SUCCESS) { _hasReading = false; return result; }
+  if(data[4] & 0x01u) { _hasReading = false; return SENSOR_INTERNAL_ERROR; }
+  _CO2 = ((uint16_t)data[0] << 8) | data[1];
+  _tVOC = ((uint16_t)data[2] << 8) | data[3];
+  _hasReading = true;
+  return SENSOR_SUCCESS;
+}
+
+/*
+ * Set the reference resistor value in ohms used by the NTC conversion.
  */
 void AirQuality::setRefResistance(float refRes)
 {
-  _refResistance = refRes;
+  if(isfinite(refRes) && refRes > 0) _refResistance = refRes;
 }
 
 /*
- *
+ * Restore a previously saved raw algorithm baseline; return the transfer status.
  */
 CCS811_STATUS_t AirQuality::setBaseLine(uint16_t baseLine)
 {
@@ -155,7 +153,7 @@ CCS811_STATUS_t AirQuality::setBaseLine(uint16_t baseLine)
 }
 
 /*
- *
+ * Read the raw algorithm baseline for later restoration.
  */
 uint16_t AirQuality::getBaseLine(void)
 {
@@ -165,15 +163,17 @@ uint16_t AirQuality::getBaseLine(void)
   {
     return 0u;
   }
-  return (((uint16_t)data[1u] << 8u)|data[0]);
+  return (((uint16_t)data[0u] << 8u)|data[1u]);
 }
 
 /*
- *
+ * Encode humidity (%) and ambient temperature (C) for compensation; reject invalid ranges.
  */
 CCS811_STATUS_t AirQuality::setEnvironmentalData(float relativeHumidity , float ambientTemperature)
 {
   uint8_t data[4];
+  if(!isfinite(relativeHumidity) || relativeHumidity < 0 || relativeHumidity > 100 ||
+     !isfinite(ambientTemperature) || ambientTemperature < -25 || ambientTemperature > 102.99f) return SENSOR_GENERIC_ERROR;
   uint16_t RH = (uint16_t)(relativeHumidity*512.f);
   uint16_t TEMP = (uint16_t)((ambientTemperature + 25.f)*512.f);
   /* Calculate humidity higher & lower bytes */
@@ -187,10 +187,11 @@ CCS811_STATUS_t AirQuality::setEnvironmentalData(float relativeHumidity , float 
 }
 
 /*
- *
+ * Calculate cached resistance (ohms) and temperature (C); invalid ADC ratios leave NAN values.
  */
 CCS811_STATUS_t AirQuality::readNTC(void)
 {
+  _resistance = _temperature = NAN;
   uint8_t data[4];
   float res, temp, lnR;
   CCS811_STATUS_t result = readMultiBytes(CCS811_NTC_REG, sizeof(data), data);
@@ -200,6 +201,7 @@ CCS811_STATUS_t AirQuality::readNTC(void)
   }
   _vREF = ((uint16_t)data[0] << 8) | data[1];
   _vNTC = ((uint16_t)data[2] << 8) | data[3];
+  if(_vREF == 0 || _vNTC == 0) { _resistance = _temperature = NAN; return SENSOR_GENERIC_ERROR; }
   /* Calculate the thermistor resitance */
   res   = (float)_vNTC * _refResistance / (float)_vREF;
   /* Calculate the temperature */
@@ -214,7 +216,7 @@ CCS811_STATUS_t AirQuality::readNTC(void)
 }
 
 /*
- *
+ * Enable the data-ready interrupt bit while preserving the drive mode.
  */
 CCS811_STATUS_t AirQuality::enableDataInterrupt(void)
 {
@@ -230,7 +232,7 @@ CCS811_STATUS_t AirQuality::enableDataInterrupt(void)
 }
 
 /*
- *
+ * Disable the data-ready interrupt bit while preserving the drive mode.
  */
 CCS811_STATUS_t AirQuality::disableDataInterrupt(void)
 {
@@ -246,7 +248,7 @@ CCS811_STATUS_t AirQuality::disableDataInterrupt(void)
 }
 
 /*
- *
+ * Enable threshold-based interrupt selection without changing other mode bits.
  */
 CCS811_STATUS_t AirQuality::enableThreshInterrupt(void)
 {
@@ -262,7 +264,7 @@ CCS811_STATUS_t AirQuality::enableThreshInterrupt(void)
 }
 
 /*
- *
+ * Disable threshold-based interrupt selection without changing other mode bits.
  */
 CCS811_STATUS_t AirQuality::disableThreshInterrupt(void)
 {
@@ -278,24 +280,25 @@ CCS811_STATUS_t AirQuality::disableThreshInterrupt(void)
 }
 
 /*
- *
+ * Write a drive-mode code (0-4), preserving the interrupt-enable bits.
  */
 CCS811_STATUS_t AirQuality::setDriveMode(uint8_t mode)
 {
+  if(mode > 4) return SENSOR_GENERIC_ERROR;
   uint8_t data;
   CCS811_STATUS_t result = readByte(CCS811_MEAS_MODE_REG, &data);
   if(result != SENSOR_SUCCESS)
   {
     return result;
   }
-  /* set the data interrupt flag */
+  /* Replace only the drive-mode field. */
   data &= ~CCS811_DRIVE_MODE_MSK;
   data |= (uint8_t)mode << CCS811_DRIVE_MODE_POS;
   return writeByte(CCS811_MEAS_MODE_REG, data);
 }
 
 /*
- *
+ * Read the status byte into the caller-provided bit-field structure.
  */
 CCS811_STATUS_t AirQuality::getStatusReg(CCS811_STATUS_REG_t *status)
 {
@@ -303,7 +306,7 @@ CCS811_STATUS_t AirQuality::getStatusReg(CCS811_STATUS_REG_t *status)
 }
 
 /*
- *
+ * Read the measurement-mode byte into the caller-provided bit-field structure.
  */
 CCS811_STATUS_t AirQuality::getMeasModeReg(CCS811_MEAS_MODE_REG_t *measMode)
 {
@@ -311,7 +314,7 @@ CCS811_STATUS_t AirQuality::getMeasModeReg(CCS811_MEAS_MODE_REG_t *measMode)
 }
 
 /*
- *
+ * Read the sensor error flags into the caller-provided bit-field structure.
  */
 CCS811_STATUS_t AirQuality::getErrorIdReg(CCS811_ERROR_ID_REG_t *errorId)
 {
@@ -319,7 +322,7 @@ CCS811_STATUS_t AirQuality::getErrorIdReg(CCS811_ERROR_ID_REG_t *errorId)
 }
 
 /*
- *
+ * Return cached TVOC in ppb; call readAlgorithmResults() and check hasReading() first.
  */
 uint16_t AirQuality::getTVOC(bool print)
 {
@@ -333,7 +336,7 @@ uint16_t AirQuality::getTVOC(bool print)
 }
 
 /*
- *
+ * Return cached equivalent CO2 in ppm; this getter does not request a new measurement.
  */
 uint16_t AirQuality::getCO2(bool print)
 {
@@ -347,7 +350,7 @@ uint16_t AirQuality::getCO2(bool print)
 }
 
 /*
- *
+ * Return the resistance in ohms cached by readNTC().
  */
 float AirQuality::getResistance(void)
 {
@@ -355,7 +358,7 @@ float AirQuality::getResistance(void)
 }
 
 /*
- *
+ * Return the NTC temperature in Celsius cached by readNTC().
  */
 float AirQuality::getTemperature(void)
 {
@@ -363,7 +366,7 @@ float AirQuality::getTemperature(void)
 }
 
 /*
- *
+ * Read the hardware identification byte used during initialization.
  */
 uint8_t AirQuality::getHwId(void)
 {
@@ -377,19 +380,20 @@ uint8_t AirQuality::getHwId(void)
 }
 
 /*
- *
+ * Poll data-ready status; no new data preserves the cache, but a transfer failure invalidates it.
  */
 bool AirQuality::isDataAvailable(void)
 {
- if(getStatusReg(&statusReg) != SENSOR_SUCCESS)
+ if(getStatusReg(&statusReg) != SENSOR_SUCCESS || statusReg.ERROR || !statusReg.FW_MODE)
  {
+   _hasReading = false;
    return false;
  }
  return (bool)statusReg.DATA_READY;
 }
 
 /*
- *
+ * Return hardware version text in the shared object buffer, or NULL on transfer failure.
  */
 char * AirQuality::getHwVersion(void)
 {
@@ -404,7 +408,7 @@ char * AirQuality::getHwVersion(void)
 }
 
 /*
- *
+ * Return boot-firmware version text; the next version query overwrites the shared buffer.
  */
 char * AirQuality::getFwBootVersion(void)
 {
@@ -419,7 +423,7 @@ char * AirQuality::getFwBootVersion(void)
 }
 
 /*
- *
+ * Return application-firmware version text; the next version query overwrites the shared buffer.
  */
 char * AirQuality::getFwAppVersion(void)
 {
@@ -436,8 +440,8 @@ char * AirQuality::getFwAppVersion(void)
 /***********************************************************************************************
  * Platform dependent routines. Change these functions implementation based on microcontroller *
  ***********************************************************************************************/
-/**
- *
+/*
+ * Initialize the shared Wire bus at 100 kHz; normal sketches configure Wire before using drivers.
  */
 void AirQuality::i2c_init(void)
 {
@@ -445,8 +449,8 @@ void AirQuality::i2c_init(void)
   Wire.setClock(100000);
 }
 
-/**
- *
+/*
+ * Select one register and require a complete one-byte response.
  */
 CCS811_STATUS_t AirQuality::readByte(uint8_t reg, uint8_t *in)
 {
@@ -465,8 +469,8 @@ CCS811_STATUS_t AirQuality::readByte(uint8_t reg, uint8_t *in)
   return SENSOR_SUCCESS;
 }
 
-/**
- *
+/*
+ * Select the starting register and read the requested number of bytes.
  */
 CCS811_STATUS_t AirQuality::readMultiBytes(uint8_t reg, uint8_t length, uint8_t *in)
 {
@@ -489,8 +493,8 @@ CCS811_STATUS_t AirQuality::readMultiBytes(uint8_t reg, uint8_t length, uint8_t 
   return SENSOR_SUCCESS;
 }
 
-/**
- *
+/*
+ * Send a register/command byte and report the transfer result.
  */
 CCS811_STATUS_t AirQuality::writeByte(uint8_t reg)
 {
@@ -503,8 +507,8 @@ CCS811_STATUS_t AirQuality::writeByte(uint8_t reg)
   return SENSOR_I2C_ERROR;
 }
 
-/**
- *
+/*
+ * Send a register/command byte and its value and report the transfer result.
  */
 CCS811_STATUS_t AirQuality::writeByte(uint8_t reg, uint8_t val)
 {
@@ -518,8 +522,8 @@ CCS811_STATUS_t AirQuality::writeByte(uint8_t reg, uint8_t val)
   return SENSOR_I2C_ERROR;
 }
 
-/**
- *
+/*
+ * Write consecutive bytes starting at the selected register and report the transfer result.
  */
 CCS811_STATUS_t AirQuality::writeMultiBytes(uint8_t reg, uint8_t length, const uint8_t *out)
 {
@@ -533,8 +537,8 @@ CCS811_STATUS_t AirQuality::writeMultiBytes(uint8_t reg, uint8_t length, const u
   return SENSOR_I2C_ERROR;
 }
 
-/**
- *
+/*
+ * Probe the I2C address without sending register data.
  */
 bool AirQuality::writeAddress(void)
 {
@@ -546,8 +550,8 @@ bool AirQuality::writeAddress(void)
   return false;
 }
 
-/**
- *
+/*
+ * Wait for the requested number of milliseconds using the Arduino platform delay.
  */
 void AirQuality::delay_ms(uint16_t ms)
 {

@@ -4,12 +4,10 @@
   Existing readily-available libraries would have been used "AS IS" and modified for ease of learning purpose.
 
   Synopsis of OLED
-  MYOSA Platform consists of a beautiful OLED Display Board. It is equiped with SSD1306 IC.
+  MYOSA Platform consists of a beautiful OLED Display Board. It is equipped with SSD1306 IC.
   It is a very small display, about 1" in diagonal but still very readable due to high contrast. 
   This display is made of 128x64 individual white OLED pixels, each one is turned on or off by the controller chip.
   I2C Address of the board = 0x3C.
-  Detailed Information about OLED board Library and usage is provided in the link below.
-  Detailed Guide: https://drive.google.com/file/d/1On6kzIq3ejcu9aMGr2ZB690NnFrXG2yO/view
 
   NOTE
   All information, including URL references, is subject to change without prior notice.
@@ -18,41 +16,41 @@
   "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied
 
   Modifications
-  1 December, 2021 by Pegasus Automation
+  10 September, 2026 by Pegasus Automation
   (as a part of MYOSA Initiative)
   
-  Contact Team MakeSense EduTech for any kind of feedback/issues pertaining to performance or any update request.
-  Email: dev.myosa@gmail.com
+  Contact Team MYOSA for any kind of feedback/issues pertaining to performance or any update request.
+  Email: myosa.event@gmail.com
 */
 
 #include "oled.h"
 
-/**
- *
+/*
+ * Pass the selected bus and pin configuration to SSD1306; initialization happens in begin().
  */
 oLed::oLed(uint8_t w, uint8_t h, TwoWire *twi, int8_t rst_pin, uint32_t clkDuring, uint32_t clkAfter)
 :Adafruit_SSD1306(w, h, twi, rst_pin, clkDuring, clkAfter)
 {
-}
+  }
 
-/**
- *
+/*
+ * Pass the selected bus and pin configuration to SSD1306; initialization happens in begin().
  */
 oLed::oLed(uint8_t w, uint8_t h, int8_t mosi_pin, int8_t sclk_pin, int8_t dc_pin, int8_t rst_pin, int8_t cs_pin)
 :Adafruit_SSD1306(w, h, mosi_pin, sclk_pin, dc_pin, rst_pin, cs_pin)
 {
-}
+  }
 
-/**
- *
+/*
+ * Pass the selected bus and pin configuration to SSD1306; initialization happens in begin().
  */
 oLed::oLed(uint8_t w, uint8_t h, SPIClass *spi,int8_t dc_pin, int8_t rst_pin, int8_t cs_pin, uint32_t bitrate)
 :Adafruit_SSD1306(w, h, spi, dc_pin, rst_pin, cs_pin, bitrate)
 {
-}
+  }
 
-/**
- *
+/*
+ * Initialize cube geometry and the display, then show the blocking welcome sequence.
  */
 bool oLed::begin(void)
 {
@@ -84,8 +82,8 @@ bool oLed::begin(void)
     return true;
 }
 
-/**
- *
+/*
+ * Show the startup screens with delays, then clear the framebuffer.
  */
 void oLed::displayLogo(void)
 {
@@ -117,8 +115,8 @@ void oLed::displayLogo(void)
     //Adafruit_SSD1306::display();
 }
 
-/**
- *
+/*
+ * Rotate by angles in degrees, project the vertices, and send the completed cube to the display.
  */
 void oLed::drawCube(float xAngle,float yAngle, float zAngle)
 {
@@ -147,8 +145,8 @@ void oLed::drawCube(float xAngle,float yAngle, float zAngle)
     Adafruit_SSD1306::display();
 }
 
-/**
- *
+/*
+ * Rotate the supplied 3D point in place around X, Y, then Z; angles are in degrees.
  */
 void oLed::rotateXYZ(point3D_t *self, float xAngle,float yAngle,float zAngle)
 {
@@ -183,8 +181,8 @@ void oLed::rotateXYZ(point3D_t *self, float xAngle,float yAngle,float zAngle)
     self->y = y;
 }
 
-/**
- *
+/*
+ * Project a point in place into screen coordinates; viewer_distance + z must be nonzero.
  */
 void oLed::project3Dto2D(point3D_t *self, uint16_t win_width, uint16_t win_height, uint16_t fov, uint16_t viewer_distance)
 {
@@ -201,176 +199,122 @@ void oLed::project3Dto2D(point3D_t *self, uint16_t win_width, uint16_t win_heigh
 }
 
 
-/**
- *
+/*
+ * Write to the framebuffer; call display() after drawing to update the physical screen.
  */
 void oLed::drawPixel(int16_t x, int16_t y, uint16_t color)
 {
   Adafruit_SSD1306::drawPixel(x,y,color);
 }
 
-/**
- *
- */
 void oLed::drawLine(int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color)
 {
   Adafruit_GFX::drawLine(x0,y0,x1,y1,color);
 }
 
-/**
- *
- */
 void oLed::drawRect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color)
 {
   Adafruit_GFX::drawRect(x,y,w,h,color);
 }
 
-/**
- *
- */
 void oLed::fillRect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color)
 {
   Adafruit_GFX::fillRect(x,y,w,h,color);
 }
 
-/**
- *
- */
 void oLed::drawCircle(int16_t x0, int16_t y0, int16_t r, uint16_t color)
 {
   Adafruit_GFX::drawCircle(x0,y0,r,color);
 }
 
-/**
- *
- */
 void oLed::drawCircleHelper(int16_t x0, int16_t y0, int16_t r, uint8_t cornername, uint16_t color)
 {
   Adafruit_GFX::drawCircleHelper(x0, y0, r, cornername, color);
 }
 
-/**
- *
- */
 void oLed::fillCircle(int16_t x0, int16_t y0, int16_t r, uint16_t color)
 {
   Adafruit_GFX::fillCircle(x0,y0,r,color);
 }
 
-/**
- *
- */
 void oLed::fillCircleHelper(int16_t x0, int16_t y0, int16_t r, uint8_t cornername, int16_t delta, uint16_t color)
 {
   Adafruit_GFX::fillCircleHelper(x0,y0,r,cornername,delta,color);
 }
 
-/**
- *
- */
 void oLed::drawTriangle(int16_t x0, int16_t y0, int16_t x1, int16_t y1, int16_t x2, int16_t y2, uint16_t color)
 {
   Adafruit_GFX::drawTriangle(x0,y0,x1,y1,x2,y2,color);
 }
 
-/**
- *
- */
 void oLed::fillTriangle(int16_t x0, int16_t y0, int16_t x1, int16_t y1, int16_t x2, int16_t y2, uint16_t color)
 {
   Adafruit_GFX::fillTriangle(x0,y0,x1,y1,x2,y2,color);
 }
 
-/**
- *
- */
 void oLed::drawRoundRect(int16_t x0, int16_t y0, int16_t w, int16_t h, int16_t radius, uint16_t color)
 {
   Adafruit_GFX::drawRoundRect(x0,y0,w,h,radius,color);
 }
 
-/**
- *
- */
 void oLed::fillRoundRect(int16_t x0, int16_t y0, int16_t w, int16_t h, int16_t radius, uint16_t color)
 {
   Adafruit_GFX::fillRoundRect(x0,y0,w,h,radius,color);
 }
 
-/**
- *
- */
 void oLed::drawBitmap(int16_t x, int16_t y, const uint8_t bitmap[], int16_t w, int16_t h, uint16_t color)
 {
   Adafruit_GFX::drawBitmap(x,y,bitmap,w,h,color);
 }
 
-/**
- *
- */
 void oLed::drawBitmap(int16_t x, int16_t y, const uint8_t bitmap[], int16_t w, int16_t h, uint16_t color, uint16_t bg)
 {
   Adafruit_GFX::drawBitmap(x,y,bitmap,w,h,color,bg);
 }
 
-/**
- *
- */
 void oLed::drawBitmap(int16_t x, int16_t y, uint8_t *bitmap, int16_t w, int16_t h, uint16_t color)
 {
   Adafruit_GFX::drawBitmap(x,y,bitmap,w,h,color);
 }
 
-/**
- *
- */
 void oLed::drawBitmap(int16_t x, int16_t y, uint8_t *bitmap, int16_t w, int16_t h, uint16_t color, uint16_t bg)
 {
   Adafruit_GFX::drawBitmap(x,y,bitmap,w,h,color, bg);
 }
 
-/**
- *
- */
 void oLed::drawXBitmap(int16_t x, int16_t y, const uint8_t bitmap[], int16_t w, int16_t h, uint16_t color)
 {
   Adafruit_GFX::drawXBitmap(x,y,bitmap,w,h,color);
 }
 
-/**
- *
- */
 void oLed::drawChar(int16_t x, int16_t y, unsigned char c, uint16_t color, uint16_t bg, uint8_t size)
 {
   Adafruit_GFX::drawChar(x,y,c,color,bg,size);
 }
 
-/**
- *
- */
 void oLed::drawChar(int16_t x, int16_t y, unsigned char c, uint16_t color, uint16_t bg, uint8_t size_x, uint8_t size_y)
 {
   Adafruit_GFX::drawChar(x,y,c,color,bg,size_x,size_y);
 }
 
-/**
- *
+/*
+ * Set the framebuffer text cursor in pixel coordinates.
  */
 void oLed::setCursor(int16_t x, int16_t y)
 {
   Adafruit_GFX::setCursor(x,y);
 }
 
-/**
- *
+/*
+ * Set text foreground color; the one-argument form uses a transparent background.
  */
 void oLed::setTextColor(uint16_t c)
 {
   Adafruit_GFX::setTextColor(c);
 }
 
-/**
- *
+/*
+ * Set text foreground and background colors.
  */
 void oLed::setTextColor(uint16_t c, uint16_t bg)
 {

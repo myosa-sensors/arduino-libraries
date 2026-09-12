@@ -8,11 +8,9 @@
   Working: Controller board prints (on Serial Monitor) the (RAW) data of 3-axis Accelerometer & Gyroscope values every 5 seconds.
 
   Synopsis of Accelerometer and Gyroscope
-  MYOSA Platform consists of an Accelerometer and Gyroscope Board. It is equiped with GY521/MPU6050 IC.
+  MYOSA Platform consists of an Accelerometer and Gyroscope Board. It is equipped with GY521/MPU6050 IC.
   MPU6050 provides a general X/Y/Z direction (3-axis) accelerometer and gyroscope.
   I2C Address of the board = 0x69.
-  Detailed Information about Accelerometer And Gyroscope board Library and usage is provided in the link below.
-  Detailed Guide: https://drive.google.com/file/d/1On6kzIq3ejcu9aMGr2ZB690NnFrXG2yO/view
 
   NOTE
   All information, including URL references, is subject to change without prior notice.
@@ -21,11 +19,11 @@
   "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied
 
   Modifications
-  1 December, 2021 by Pegasus Automation
+  10 September, 2026 by Pegasus Automation
   (as a part of MYOSA Initiative)
   
-  Contact Team MakeSense EduTech for any kind of feedback/issues pertaining to performance or any update request.
-  Email: dev.myosa@gmail.com
+  Contact Team MYOSA for any kind of feedback/issues pertaining to performance or any update request.
+  Email: myosa.event@gmail.com
 */
 
 /* Library Inclusion */

@@ -1,31 +1,30 @@
-#########################################
-# Syntax Coloring Map for TempAndHumidity
-#########################################
-
-#######################################
-# Datatypes (KEYWORD1)
-#######################################
-TempAndHumidity		KEYWORD1
-
-#######################################
-# Methods and Functions (KEYWORD2)
-#######################################
-begin				KEYWORD2
-reset				KEYWORD2
-ping				KEYWORD2
-getRelativeHumdity	KEYWORD2
-getTempC			KEYWORD2
-getTempF			KEYWORD2
-getHeatIndexC		KEYWORD2
-getHeatIndexF		KEYWORD2
-getSerialNumber		KEYWORD2
+# Syntax highlighting for TempAndHumidity
+TempAndHumidity	KEYWORD1
+begin	KEYWORD2
 getFirmwareVersion	KEYWORD2
-
-#######################################
-# Library (KEYWORD3)
-#######################################
-
-
-#######################################
-# Constants (LITERAL1)
-#######################################
+getHeatIndexC	KEYWORD2
+getHeatIndexF	KEYWORD2
+getRelativeHumdity	KEYWORD2
+getSerialNumber	KEYWORD2
+getTempC	KEYWORD2
+getTempF	KEYWORD2
+ping	KEYWORD2
+reset	KEYWORD2
+Si7021_I2C_ADDRESS	LITERAL1
+Si7021_SOFT_RESET_DELAY	LITERAL1
+Si7021_MEAS_RH_HOLD_MODE	LITERAL1
+Si7021_MEAS_RH_NOHOLD_MODE	LITERAL1
+Si7021_MEAS_TEMP_HOLD_MODE	LITERAL1
+Si7021_MEAS_TEMP_NOHOLD_MODE	LITERAL1
+Si7021_READ_TEMP_PREV_RH_MEAS	LITERAL1
+Si7021_RESET	LITERAL1
+Si7021_WRITE_USER_REG	LITERAL1
+Si7021_READ_USER_REG	LITERAL1
+Si7021_WRITE_HEATER_CNTRL_REG	LITERAL1
+Si7021_READ_HEATER_CNTRL_REG	LITERAL1
+Si7021_ID1_CMD0	LITERAL1
+Si7021_ID1_CMD1	LITERAL1
+Si7021_ID2_CMD0	LITERAL1
+Si7021_ID2_CMD1	LITERAL1
+Si7021_FIMWARE_REV_CMD0	LITERAL1
+Si7021_FIMWARE_REV_CMD1	LITERAL1

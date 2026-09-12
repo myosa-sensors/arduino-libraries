@@ -1,38 +1,47 @@
-############################################
-# Syntax Coloring Map for BarometricPressure
-############################################
-
-#######################################
-# Datatypes (KEYWORD1)
-#######################################
+# Syntax highlighting for BarometricPressure
 BarometricPressure	KEYWORD1
-
-#######################################
-# Methods and Functions (KEYWORD2)
-#######################################
-begin				KEYWORD2
-getPressure			KEYWORD2
+begin	KEYWORD2
+getAltitude	KEYWORD2
+getDeviceId	KEYWORD2
+getPressure	KEYWORD2
+getPressureBar	KEYWORD2
+getPressureHg	KEYWORD2
 getPressurePascal	KEYWORD2
-getPressureHg		KEYWORD2
-getPressureBar		KEYWORD2
-getTempC			KEYWORD2
-getTempF			KEYWORD2
-reset				KEYWORD2
-ping				KEYWORD2
-getDeviceId			KEYWORD2
 getSeaLevelPressure	KEYWORD2
-getAltitude			KEYWORD2
-setAccuracyMode		KEYWORD2
-
-#######################################
-# Library (KEYWORD3)
-#######################################
-
-
-#######################################
-# Constants (LITERAL1)
-#######################################
-ULTRA_LOW_POWER			LITERAL1
-STANDARD				LITERAL1
-HIGH_RESOLUTION			LITERAL1
+getTempC	KEYWORD2
+getTempF	KEYWORD2
+ping	KEYWORD2
+reset	KEYWORD2
+setAccuracyMode	KEYWORD2
+BMP180_SOFT_REST_VALUE	LITERAL1
+BMP180_GET_TEMPERATURE	LITERAL1
+BMP180_GET_PRESSURE_OSS0	LITERAL1
+BMP180_GET_PRESSURE_OSS1	LITERAL1
+BMP180_GET_PRESSURE_OSS2	LITERAL1
+BMP180_GET_PRESSURE_OSS3	LITERAL1
+BMP180_I2C_ADDRESS	LITERAL1
+BMP180_CHIP_ID	LITERAL1
+BMP180_ERROR	LITERAL1
+BMP180_MAX_COEFF_REGS	LITERAL1
+SEA_LEVEL_AVG_PRESSURE	LITERAL1
+AC1_REG	LITERAL1
+AC2_REG	LITERAL1
+AC3_REG	LITERAL1
+AC4_REG	LITERAL1
+AC5_REG	LITERAL1
+AC6_REG	LITERAL1
+B1_REG	LITERAL1
+B2_REG	LITERAL1
+MB_REG	LITERAL1
+MC_REG	LITERAL1
+MD_REG	LITERAL1
+ADC_OUT_XLSB_REG	LITERAL1
+ADC_OUT_LSB_REG	LITERAL1
+ADC_OUT_MSB_REG	LITERAL1
+CONTROL_REG	LITERAL1
+SOFT_RESET_REG	LITERAL1
+CHIP_ID_REG	LITERAL1
+ULTRA_LOW_POWER	LITERAL1
+STANDARD	LITERAL1
+HIGH_RESOLUTION	LITERAL1
 ULTRA_HIGH_RESOLUTION	LITERAL1

@@ -1,0 +1,16 @@
+# Local workspace instructions and editor state
+[Aa][Gg][Ee][Nn][Tt][Ss].md
+[Aa][Gg][Ee][Nn][Tt][Ss].override.md
+.agents/
+.codex/
+.claude/
+.vscode/
+.idea/
+# Generated build and temporary files
+build/
+__pycache__/
+*.pyc
+*.log
+*.tmp
+.DS_Store
+Thumbs.db

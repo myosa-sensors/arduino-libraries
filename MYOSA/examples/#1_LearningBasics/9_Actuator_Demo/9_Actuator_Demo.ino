@@ -8,16 +8,11 @@
   Working: Turns Buzzer and AC switching ckt ON for 1 second and then turns it OFF.
 
   Synopsis of Actuator Board
-  MYOSA Platform consists of an Actuator board. It is equiped with PCA9536 IC, a 4-bit I/O Expander with I2C operation.
-  Hence, there are 4 Configurable I/O Ports available in the Actuator Board. We have utilized the ports as described below.
-  1. ---> 5V Buzzer
-  2. ---> AC switching Triac Circuit
-  3. ---> Available for user configuration (Output Only)
-  4. ---> Available for user configuration (Output Only)
-  I2C Address of the board = 0x41.
-  Detailed Information about Actuator board Library and usage is provided in the link below.
-  Detailed Guide: https://drive.google.com/file/d/1On6kzIq3ejcu9aMGr2ZB690NnFrXG2yO/view
-  
+  The MYOSA actuator board uses the PCA9536 four-bit I2C GPIO expander at 0x41.
+  IO0 controls the AC switching output; IO1 controls the buzzer.
+  IO2 and IO3 are available for user configuration.
+  Output latches are set before changing pin direction to avoid startup pulses.
+
   NOTE
   All information, including URL references, is subject to change without prior notice.
   Please always use the latest versions of software-release for best performance.
@@ -25,11 +20,11 @@
   "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied
 
   Modifications
-  1 December, 2021 by Pegasus Automation
+  10 September, 2026 by Pegasus Automation
   (as a part of MYOSA Initiative)
   
-  Contact Team MakeSense EduTech for any kind of feedback/issues pertaining to performance or any update request.
-  Email: dev.myosa@gmail.com
+  Contact Team MYOSA for any kind of feedback/issues pertaining to performance or any update request.
+  Email: myosa.event@gmail.com
 */
 
 /* Library Inclusion */
@@ -58,13 +53,13 @@ void setup() {
     delay(500u);
   }
 
-  /* Set AC SWITCH IO as output */
-  gpioExpander.setMode(AC_SWITCH_IO, IO_OUTPUT);
-  gpioExpander.setState(AC_SWITCH_IO, IO_LOW);
+  /* Set AC SWITCH IO as output */  gpioExpander.setState(AC_SWITCH_IO, IO_LOW);
 
-  /* Set BUZZER IO as output */
+  gpioExpander.setMode(AC_SWITCH_IO, IO_OUTPUT);
+
+  /* Set BUZZER IO as output */  gpioExpander.setState(BUZZER_IO, IO_LOW);
+
   gpioExpander.setMode(BUZZER_IO, IO_OUTPUT);
-  gpioExpander.setState(BUZZER_IO, IO_LOW);
   delay(2000);
   
   /* Turn-on AC SWITCH for one second */

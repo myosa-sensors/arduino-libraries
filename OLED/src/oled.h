@@ -4,12 +4,10 @@
   Existing readily-available libraries would have been used "AS IS" and modified for ease of learning purpose.
 
   Synopsis of OLED
-  MYOSA Platform consists of a beautiful OLED Display Board. It is equiped with SSD1306 IC.
+  MYOSA Platform consists of a beautiful OLED Display Board. It is equipped with SSD1306 IC.
   It is a very small display, about 1" in diagonal but still very readable due to high contrast. 
   This display is made of 128x64 individual white OLED pixels, each one is turned on or off by the controller chip.
   I2C Address of the board = 0x3C.
-  Detailed Information about OLED board Library and usage is provided in the link below.
-  Detailed Guide: https://drive.google.com/file/d/1On6kzIq3ejcu9aMGr2ZB690NnFrXG2yO/view
 
   NOTE
   All information, including URL references, is subject to change without prior notice.
@@ -18,11 +16,11 @@
   "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied
 
   Modifications
-  1 December, 2021 by Pegasus Automation
+  10 September, 2026 by Pegasus Automation
   (as a part of MYOSA Initiative)
   
-  Contact Team MakeSense EduTech for any kind of feedback/issues pertaining to performance or any update request.
-  Email: dev.myosa@gmail.com
+  Contact Team MYOSA for any kind of feedback/issues pertaining to performance or any update request.
+  Email: myosa.event@gmail.com
 */
 
 #ifndef __OLED_H__
@@ -38,6 +36,11 @@
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
 
+/*
+ * Drawing and text helpers modify the framebuffer; call display() to send it to the screen.
+ * Coordinates and dimensions are pixels; cube angles are degrees.
+ * begin() includes a blocking welcome sequence.
+ */
 class oLed : public Adafruit_SSD1306
 {
   public:

@@ -1,58 +1,63 @@
-#######################################
-# Syntax Coloring Map for AirQuality
-#######################################
-
-#######################################
-# Datatypes (KEYWORD1)
-#######################################
-AirQuality				KEYWORD1
-
-#######################################
-# Methods and Functions (KEYWORD2)
-#######################################
-begin					KEYWORD2
-reset					KEYWORD2
-ping					KEYWORD2
-readAlgorithmResults	KEYWORD2
-getTVOC					KEYWORD2
-getCO2					KEYWORD2
-getResistance			KEYWORD2
-getTemperature			KEYWORD2
-getHwId					KEYWORD2
-getBaseLine				KEYWORD2
-setRefResistance		KEYWORD2
-isDataAvailable			KEYWORD2
-getHwVersion			KEYWORD2
-getFwAppVersion			KEYWORD2
-getFwBootVersion		KEYWORD2
-readNTC					KEYWORD2
-setEnvironmentalData	KEYWORD2
-setDriveMode			KEYWORD2
-enableDataInterrupt		KEYWORD2
-enableDataInterrupt		KEYWORD2
-enableThreshInterrupt	KEYWORD2
+# Syntax highlighting for AirQuality
+AirQuality	KEYWORD1
+begin	KEYWORD2
+disableDataInterrupt	KEYWORD2
 disableThreshInterrupt	KEYWORD2
-getStatusReg			KEYWORD2
-getMeasModeReg			KEYWORD2
-getMeasModeReg			KEYWORD2
-setBaseLine				KEYWORD2
-
-#######################################
-# Library (KEYWORD3)
-#######################################
-
-#######################################
-# Constants (LITERAL1)
-#######################################
-CCS811_HW_ID			LITERAL1
-CCS811_I2C_ADDRESS0		LITERAL1
-CCS811_I2C_ADDRESS1		LITERAL1
-
-#######################################
-# Constants (LITERAL2)
-#######################################
-SENSOR_SUCCESS			LITERAL2
-SENSOR_ID_ERROR			LITERAL2
-SENSOR_I2C_ERROR		LITERAL2
-SENSOR_INTERNAL_ERROR	LITERAL2
-SENSOR_GENERIC_ERROR	LITERAL2
+enableDataInterrupt	KEYWORD2
+enableThreshInterrupt	KEYWORD2
+getBaseLine	KEYWORD2
+getCO2	KEYWORD2
+getErrorIdReg	KEYWORD2
+getFwAppVersion	KEYWORD2
+getFwBootVersion	KEYWORD2
+getHwId	KEYWORD2
+getHwVersion	KEYWORD2
+getMeasModeReg	KEYWORD2
+getResistance	KEYWORD2
+getStatusReg	KEYWORD2
+getTVOC	KEYWORD2
+getTemperature	KEYWORD2
+hasReading	KEYWORD2
+isDataAvailable	KEYWORD2
+ping	KEYWORD2
+readAlgorithmResults	KEYWORD2
+readNTC	KEYWORD2
+reset	KEYWORD2
+setBaseLine	KEYWORD2
+setDriveMode	KEYWORD2
+setEnvironmentalData	KEYWORD2
+setRefResistance	KEYWORD2
+CCS811_HW_ID	LITERAL1
+CCS811_I2C_ADDRESS0	LITERAL1
+CCS811_I2C_ADDRESS1	LITERAL1
+CCS811_STATUS_REG	LITERAL1
+CCS811_MEAS_MODE_REG	LITERAL1
+CCS811_ALG_RESULT_DATA_REG	LITERAL1
+CCS811_RAW_DATA_REG	LITERAL1
+CCS811_ENV_DATA_REG	LITERAL1
+CCS811_NTC_REG	LITERAL1
+CCS811_THRESHOLDS_REG	LITERAL1
+CCS811_BASELINE_REG	LITERAL1
+CCS811_HW_ID_REG	LITERAL1
+CCS811_HW_VER_REG	LITERAL1
+CCS811_FW_BOOT_VER_REG	LITERAL1
+CCS811_FW_APP_VER_REG	LITERAL1
+CCS811_ERROR_ID_REG	LITERAL1
+CCS811_SOFT_RESET_REG	LITERAL1
+CCS811_APP_START_REG	LITERAL1
+CCS811_DRIVE_MODE_MSK	LITERAL1
+CCS811_INT_DATARDY_MSK	LITERAL1
+CCS811_INT_THRESH_MSK	LITERAL1
+CCS811_DRIVE_MODE_POS	LITERAL1
+CCS811_INT_DATARDY_POS	LITERAL1
+CCS811_INT_THRESH_POS	LITERAL1
+CCS811_DRIVE_MODE0	LITERAL1
+CCS811_DRIVE_MODE1	LITERAL1
+CCS811_DRIVE_MODE2	LITERAL1
+CCS811_DRIVE_MODE3	LITERAL1
+CCS811_DRIVE_MODE4	LITERAL1
+SENSOR_SUCCESS	LITERAL1
+SENSOR_ID_ERROR	LITERAL1
+SENSOR_I2C_ERROR	LITERAL1
+SENSOR_INTERNAL_ERROR	LITERAL1
+SENSOR_GENERIC_ERROR	LITERAL1
