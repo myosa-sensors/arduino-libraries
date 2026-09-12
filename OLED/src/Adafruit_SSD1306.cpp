@@ -175,7 +175,7 @@ Adafruit_SSD1306::Adafruit_SSD1306(uint8_t w, uint8_t h, TwoWire *twi,
       wireClk(clkDuring), restoreClk(clkAfter)
 #endif
 {
-}
+  }
 
 /*!
     @brief  Constructor for SPI SSD1306 displays, using software (bitbang)
@@ -242,7 +242,7 @@ Adafruit_SSD1306::Adafruit_SSD1306(uint8_t w, uint8_t h, SPIClass *spi,
                                    uint32_t bitrate)
     : Adafruit_GFX(w, h), spi(spi ? spi : &SPI), wire(NULL), buffer(NULL),
       mosiPin(-1), clkPin(-1), dcPin(dc_pin), csPin(cs_pin), rstPin(rst_pin) {
-#ifdef SPI_HAS_TRANSACTION
+  #ifdef SPI_HAS_TRANSACTION
   spiSettings = SPISettings(bitrate, MSBFIRST, SPI_MODE0);
 #endif
 }
@@ -304,7 +304,7 @@ Adafruit_SSD1306::Adafruit_SSD1306(int8_t dc_pin, int8_t rst_pin, int8_t cs_pin)
     : Adafruit_GFX(SSD1306_LCDWIDTH, SSD1306_LCDHEIGHT), spi(&SPI), wire(NULL),
       buffer(NULL), mosiPin(-1), clkPin(-1), dcPin(dc_pin), csPin(cs_pin),
       rstPin(rst_pin) {
-#ifdef SPI_HAS_TRANSACTION
+  #ifdef SPI_HAS_TRANSACTION
   spiSettings = SPISettings(8000000, MSBFIRST, SPI_MODE0);
 #endif
 }
@@ -347,7 +347,7 @@ inline void Adafruit_SSD1306::SPIwrite(uint8_t d) {
     (void)spi->transfer(d);
   } else {
     for (uint8_t bit = 0x80; bit; bit >>= 1) {
-#ifdef HAVE_PORTREG
+  #ifdef HAVE_PORTREG
       if (d & bit)
         *mosiPort |= mosiPinMask;
       else
@@ -603,6 +603,7 @@ boolean Adafruit_SSD1306::begin(uint8_t vcs, uint8_t addr, boolean reset,
             commands as needed by one's own application.
 */
 void Adafruit_SSD1306::drawPixel(int16_t x, int16_t y, uint16_t color) {
+  if(!buffer) return;
   if ((x >= 0) && (x < width()) && (y >= 0) && (y < height())) {
     // Pixel is in-bounds. Rotate coordinates if needed.
     switch (getRotation()) {
@@ -641,6 +642,7 @@ void Adafruit_SSD1306::drawPixel(int16_t x, int16_t y, uint16_t color) {
             commands as needed by one's own application.
 */
 void Adafruit_SSD1306::clearDisplay(void) {
+  if(!buffer) return;
   memset(buffer, 0, WIDTH * ((HEIGHT + 7) / 8));
 }
 
@@ -694,6 +696,7 @@ void Adafruit_SSD1306::drawFastHLine(int16_t x, int16_t y, int16_t w,
 
 void Adafruit_SSD1306::drawFastHLineInternal(int16_t x, int16_t y, int16_t w,
                                              uint16_t color) {
+  if(!buffer) return;
 
   if ((y >= 0) && (y < HEIGHT)) { // Y coord in bounds?
     if (x < 0) {                  // Clip left
@@ -777,6 +780,7 @@ void Adafruit_SSD1306::drawFastVLine(int16_t x, int16_t y, int16_t h,
 
 void Adafruit_SSD1306::drawFastVLineInternal(int16_t x, int16_t __y,
                                              int16_t __h, uint16_t color) {
+  if(!buffer) return;
 
   if ((x >= 0) && (x < WIDTH)) { // X coord in bounds?
     if (__y < 0) {               // Clip top
@@ -883,6 +887,7 @@ void Adafruit_SSD1306::drawFastVLineInternal(int16_t x, int16_t __y,
             screen if display() has not been called.
 */
 boolean Adafruit_SSD1306::getPixel(int16_t x, int16_t y) {
+  if(!buffer) return false;
   if ((x >= 0) && (x < width()) && (y >= 0) && (y < height())) {
     // Pixel is in-bounds. Rotate coordinates if needed.
     switch (getRotation()) {
@@ -921,6 +926,7 @@ uint8_t *Adafruit_SSD1306::getBuffer(void) { return buffer; }
             of graphics commands, as best needed by one's own application.
 */
 void Adafruit_SSD1306::display(void) {
+  if(!buffer) return;
   TRANSACTION_START
   static const uint8_t PROGMEM dlist1[] = {
       SSD1306_PAGEADDR,
@@ -1114,3 +1120,12 @@ void Adafruit_SSD1306::dim(boolean dim) {
   ssd1306_command1(dim ? 0 : contrast);
   TRANSACTION_END
 }
+
+/*
+  Modifications
+  10 September, 2026 by Pegasus Automation
+  (as a part of MYOSA Initiative)
+
+  Contact Team MYOSA for feedback or issues.
+  Email: myosa.event@gmail.com
+*/

@@ -8,21 +8,10 @@
   Working: This example scans the Nearby WiFi networks along with relevant details.
 
   Synopsis of MYOSA platform
-  MYOSA Platform consists of a centralized motherboard a.k.a Controller board, 5 different sensor modules, an OLED display and an actuator board in the kit.
-  Controller board is designed on ESP32 module. It is a low-power system on a chip microcontrollers with integrated Wi-Fi and Bluetooth.
-  5 Sensors are as below,
-  1 --> Accelerometer and Gyroscope (6-axis motion sensor)
-  2 --> Temperature and Humidity Sensor
-  3 --> Barometric Pressure Sensor
-  4 --> Light, Proximity and Gesture Sensor
-  5 --> Air Quality Sensor
-  Actuator board contains a Buzzer and an AC switching circuit to turn on/off an electrical appliance.
-  There is also an OLED display in the MYOSA kit.
-
-  You can design N number of such utility examples as a part of your learning from this kit.
-  
-  Detailed Information about MYOSA platform and usage is provided in the link below.
-  Detailed Guide: https://drive.google.com/file/d/1On6kzIq3ejcu9aMGr2ZB690NnFrXG2yO/view
+  MYOSA uses an ESP32 controller with Wi-Fi and Bluetooth connectivity.
+  The kit includes motion, pressure, light/proximity/gesture, VL53L0X distance
+  and MAX30100 heart-rate/SpO2 boards, with an OLED for measurements.
+  The libraries support individual sensor examples and combined BLE applications.
 
   NOTE
   All information, including URL references, is subject to change without prior notice.
@@ -31,11 +20,11 @@
   "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied
 
   Modifications
-  1 December, 2021 by Pegasus Automation
+  11 September, 2026 by Pegasus Automation
   (as a part of MYOSA Initiative)
   
-  Contact Team MakeSense EduTech for any kind of feedback/issues pertaining to performance or any update request.
-  Email: dev.myosa@gmail.com
+  Contact Team MYOSA for any kind of feedback/issues pertaining to performance or any update request.
+  Email: myosa.event@gmail.com
 */
 
 /* Library Inclusion - WiFi.h is generic ESP32 library available */
@@ -64,7 +53,10 @@ void loop()
 
     int n = WiFi.scanNetworks();
     
-    if (n == 0) {
+    if(n < 0) {
+        Serial.println("WiFi scan failed; retrying shortly.");
+    }
+    else if (n == 0) {
         Serial.println("No nearby networks found");
     }
     else {
@@ -103,6 +95,7 @@ void loop()
     Serial.println("\nScanning done");
     Serial.println("");
 
+    WiFi.scanDelete();
     // Wait a bit before scanning again
     delay(5000);
 }

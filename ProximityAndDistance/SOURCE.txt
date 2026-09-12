@@ -1,0 +1,7 @@
+Pololu VL53L0X Arduino driver
+Source: https://github.com/pololu/vl53l0x-arduino
+Retrieved: 10 September, 2026
+Original SHA-256:
+VL53L0X.cpp  6c5c1ba443dcc106e5a4ece734f96168cd8abdaae00dcfa5b86b4dc7b4bb1c2a
+VL53L0X.h  9f3b71a36b4d3e3103a00b0ac25ea72fa13c48f0aa972ad8c8ae151a8eb08f16
+VL53L0X-LICENSE.txt  0f0ba24cfad58bffe8e3082e8058546adff47eb2d7495611afb07a5c2437d058

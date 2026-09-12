@@ -4,25 +4,15 @@
   Existing readily-available libraries would have been used "AS IS" and modified for ease of learning purpose.
   
   Burglar Alarm
-  Connection: Connect "Light, Proximity, and Gesture" and "Actuator" boards from the MYOSA kit with the "Controller" board and power them up inside your locker along with your valuables.
-  Working: Now in normal scenario, locker lights will be OFF and there will be complete dark but in case of unwanted theft, there would be light in the locker and hence on the module too. Controller will detect the light from the Light sensor and will turn the Buzzer On alerting the user of unwanted theft.
+  Connection: Connect the Light, Proximity, and Gesture and OLED boards to the controller. Use its buzzer on GPIO 12.
+  Working: Light above 10 lux sounds the buzzer and displays an alert. Darkness clears the alarm.
 
   Synopsis of MYOSA platform
-  MYOSA Platform consists of a centralized motherboard a.k.a Controller board, 5 different sensor modules, an OLED display and an actuator board in the kit.
-  Controller board is designed on ESP32 module. It is a low-power system on a chip microcontrollers with integrated Wi-Fi and Bluetooth.
-  5 Sensors are as below,
-  1 --> Accelerometer and Gyroscope (6-axis motion sensor)
-  2 --> Temperature and Humidity Sensor
-  3 --> Barometric Pressure Sensor
-  4 --> Light, Proximity and Gesture Sensor
-  5 --> Air Quality Sensor
-  Actuator board contains a Buzzer and an AC switching circuit to turn on/off an electrical appliance.
-  There is also an OLED display in the MYOSA kit.
-
-  You can design N number of such utility examples as a part of your learning from this kit.
-  
-  Detailed Information about MYOSA platform and usage is provided in the link below.
-  Detailed Guide: https://drive.google.com/file/d/1On6kzIq3ejcu9aMGr2ZB690NnFrXG2yO/view
+  MYOSA uses an ESP32 controller with Wi-Fi and Bluetooth connectivity.
+  The kit includes motion, pressure, light/proximity/gesture, VL53L0X distance
+  and MAX30100 heart-rate/SpO2 boards, with an OLED for measurements.
+  The controller provides an LED on GPIO 2 and an active-high buzzer on GPIO 12.
+  The libraries support individual sensor examples and combined BLE applications.
 
   NOTE
   All information, including URL references, is subject to change without prior notice.
@@ -31,91 +21,103 @@
   "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied
 
   Modifications
-  1 December, 2021 by Pegasus Automation
+  11 September, 2026 by Pegasus Automation
   (as a part of MYOSA Initiative)
   
-  Contact Team MakeSense EduTech for any kind of feedback/issues pertaining to performance or any update request.
-  Email: dev.myosa@gmail.com
+  Contact Team MYOSA for any kind of feedback/issues pertaining to performance or any update request.
+  Email: myosa.event@gmail.com
 */
 
 /* Library Inclusion */
 #include <LightProximityAndGesture.h>
-#include <Actuator.h>
+#include <oled.h>
 
-/* Creating Object of LightProximityAndGesture and Actuator class */
-Actuator gpioExpander;
+/* Creating Objects of LightProximityAndGesture and oLed Classes */
 LightProximityAndGesture Lpg;
-uint16_t *rgbProportion;
+oLed display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1, 100000UL, 100000UL);
+bool displayReady = false;
+
+/* Global Constants */
+const uint8_t BUZZER_PIN = 12u; // Active-high controller buzzer.
+const float LIGHT_THRESHOLD_LUX = 10.0f; // Adjust for the locker lighting; this is a lux threshold.
+const uint32_t READING_INTERVAL_MS = 150u;
+
+/* Function Declaration */
+void showAlarmStatus(const char *title, const char *message);
 
 /* Setup Function */
-void setup() {
+void setup(void)
+{
+  /* Keep the buzzer off during initialization. */
+  pinMode(BUZZER_PIN, OUTPUT);
+  digitalWrite(BUZZER_PIN, LOW);
 
   /* Setting up communication */
   Serial.begin(115200);
   Wire.begin();
   Wire.setClock(100000);
 
-  /* Initializing Actuator Board */
+  displayReady = display.begin();
+  if(!displayReady)
+    Serial.printf("OLED initialization failed; buzzer and Serial remain available.\n");
+  showAlarmStatus("Starting", "Waiting for sensor");
+
+  /* Initialize ambient-light sensing without interrupts. */
   for(;;)
   {
-    if(gpioExpander.ping())
+    if(Lpg.begin() && Lpg.enableAmbientLightSensor(DISABLE))
     {
-      Serial.println("4bit IO Expander Actautor (PCA9536) is connected");
+      Serial.printf("Ambient light sensor is connected and running.\n");
       break;
     }
-    Serial.println("4bit IO Expander Actuator (PCA9536) is disconnected");
+    Serial.printf("Ambient light sensor initialization failed; retrying.\n");
     delay(500u);
   }
-  
-  /* Set buzzer IO as output */
-  gpioExpander.setMode(BUZZER_IO, IO_OUTPUT);
-  gpioExpander.setState(BUZZER_IO, IO_LOW);
-  delay(3000);
-  
-  /* Initializing Light, Proximity, Gesture Sensor */
-  for(;;)
-  {
-    if(Lpg.begin())
-    {
-      Serial.println("Proximity, Ambient Light, RGB & Gesture sensor is connected...");
-      break;
-    }
-    Serial.println("Proximity, Ambient Light, RGB & Gesture sensor is disconnected...");
-    delay(500u);
-  }
-  Serial.println("APDS9960 initialization completed");
-
-  /* Start running the APDS9960 Ambient light sensor (no interrupts) */
-  if( Lpg.enableAmbientLightSensor(DISABLE) )
-  {
-    Serial.println("Light sensor is now running");
-  }
-  else
-  {
-    Serial.println("Something went wrong during light sensor init!");
-  }
-
-  /* Wait for initialization and calibration to finish */
   delay(500u);
+  showAlarmStatus("Monitoring", "Waiting for reading");
 }
 
 /* Loop Function */
-void loop() {
-
-  /* Loop Function constantly checks the Ambient Light levels and if that rises up (meaning there is a light source in the locker), Buzzer will Turn On */
-  if(Lpg.ping())
+void loop(void)
+{
+  const float ambientLightLux = Lpg.getAmbientLightLux(false);
+  if(!isfinite(ambientLightLux))
   {
-    /* Read the light levels (ambient, red, green, blue) */
-    int ambLight = Lpg.getAmbientLight();
-    if(ambLight>10)
-    {
-      gpioExpander.setState(BUZZER_IO, IO_HIGH);
-      Serial.println("Alert! Alert! Alert! Burglar Detected...");
-    }
-    else
-    {
-      gpioExpander.setState(BUZZER_IO, IO_LOW);
-    }
+    /* Keep the last buzzer state; an unavailable reading does not mean darkness. */
+    Serial.printf("Ambient light unavailable; buzzer state unchanged.\n");
+    showAlarmStatus("Sensor", "Light unavailable");
+    delay(READING_INTERVAL_MS);
+    return;
   }
-  delay(150u);
+
+  Serial.printf("Ambient Light: %.2f lux\n", ambientLightLux);
+  if(ambientLightLux > LIGHT_THRESHOLD_LUX)
+  {
+    digitalWrite(BUZZER_PIN, HIGH);
+    Serial.printf("Alert! Alert! Alert! Burglar Detected...\n");
+    showAlarmStatus("ALERT!", "ALERT! Light detected");
+  }
+  else
+  {
+    digitalWrite(BUZZER_PIN, LOW);
+    showAlarmStatus("Monitoring", "Locker is dark");
+  }
+  delay(READING_INTERVAL_MS);
+}
+
+/* Draw the current alarm or sensor status on the OLED. */
+void showAlarmStatus(const char *title, const char *message)
+{
+  if(!displayReady)
+    return;
+
+  display.clearDisplay();
+  display.setTextColor(SSD1306_WHITE);
+  display.setTextSize(2);
+  display.setCursor(0, 0);
+  display.printf("%s", title);
+  display.setTextSize(1);
+  display.setCursor(0, 32);
+  display.printf("%s", message);
+  display.display();
 }

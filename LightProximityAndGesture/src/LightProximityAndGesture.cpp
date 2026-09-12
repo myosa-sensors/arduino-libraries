@@ -4,12 +4,11 @@
   Existing readily-available libraries would have been used "AS IS" and modified for ease of learning purpose.
 
   Synopsis of Light Proximity and Gesture Board
-  MYOSA Platform consists of an Light Proximity and Gesture Board. It is equiped with APDS9960 IC.
-  It is a digital RGB, ambient light, proximity and gesture sensor device with I2C compatible interface.
-  I2C Address of the board = 0x39.
-  Detailed Information about Light Proximity and Gesture board Library and usage is provided in the link below.
-  Detailed Guide: https://drive.google.com/file/d/1On6kzIq3ejcu9aMGr2ZB690NnFrXG2yO/view
- 
+  The MYOSA light and gesture board uses the APDS9960 sensor at I2C address 0x39.
+  Ambient light is reported in lux; RGB is in percentages and proximity in raw counts.
+  Gesture sensing reports direction, near/far motion and timeout status.
+  Successful configuration settings are restored when the board reconnects.
+
   NOTE
   All information, including URL references, is subject to change without prior notice.
   Please always use the latest versions of software-release for best performance.
@@ -17,57 +16,64 @@
   "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied
 
   Modifications
-  1 December, 2021 by Pegasus Automation
+  11 September, 2026 by Pegasus Automation
   (as a part of MYOSA Initiative)
  
-  Contact Team MakeSense EduTech for any kind of feedback/issues pertaining to performance or any update request.
-  Email: dev.myosa@gmail.com
+  Contact Team MYOSA for any kind of feedback/issues pertaining to performance or any update request.
+  Email: myosa.event@gmail.com
 */
 
 #include "LightProximityAndGesture.h"
 
-/**
- *
+/*
+ * Initialize the device address and local state before any measurement is requested.
  */
 LightProximityAndGesture::LightProximityAndGesture()
 {
   _i2cSlaveAddress = APDS9960_I2C_ADDRESS;
+  _isConnected = false;
+  resetGestureParameters();
 }
 
-/**
- *
+/*
+ * Reconnect with begin() when needed, then restore cached configuration before enabling engines.
  */
 bool LightProximityAndGesture::ping(void)
 {
-    bool getConnectSts = writeAddress();
-    if(!_isConnected && getConnectSts)
-    {
-      begin();
-      
-      enableAmbientLightSensor(DISABLE);
-      enableProximitySensor(DISABLE);
-      setProximityGain(PGAIN_2X);
-      // enableGestureSensor(DISABLE);
-      delay(500u);
-    
-
+  if(!writeAddress()) { _isConnected = false; return false; }
+  if(!_isConnected) {
+    uint8_t values[128], valid[16];
+    memcpy(values, _configValues, sizeof(values));
+    memcpy(valid, _configValid, sizeof(valid));
+    bool ready = begin();
+    if(ready) {
+      // Restore configuration first, then enable the previously selected engines.
+      for(uint16_t reg = 0x81; reg < 0xB0 && ready; ++reg)
+        if(valid[(reg - 0x80) / 8] & (1u << ((reg - 0x80) % 8))) ready = writeByte(reg, values[reg - 0x80]);
+      if(ready && (valid[0] & 1)) ready = writeByte(APDS9960_ENABLE, values[0]);
     }
-    _isConnected = getConnectSts;
-    return getConnectSts;
+    memcpy(_configValues, values, sizeof(values));
+    memcpy(_configValid, valid, sizeof(valid));
+    _isConnected = ready;
+  }
+  return _isConnected;
 }
 
-/**
- *
+/*
+ * Validate the APDS9960 identity and load defaults; sensing engines remain disabled.
  */
 bool LightProximityAndGesture::begin(void)
 {
+  _isConnected = false;
+  resetGestureParameters();
   uint8_t deviceId;
   /* Read ID register and check against known values for APDS9960 */
   if( !readByte(APDS9960_ID,&deviceId) )
   {
     return false;
   }
-  if( (deviceId != APDS9960_ID_1) && (deviceId != APDS9960_ID_2) && (deviceId != APDS9960_ID_3) )
+  if( (deviceId != APDS9960_ID_1) && (deviceId != APDS9960_ID_2) &&
+      (deviceId != APDS9960_ID_3) && (deviceId != APDS9960_ID_4) )
   {
     return false;
   }
@@ -198,24 +204,24 @@ bool LightProximityAndGesture::begin(void)
   return true;
 }
 
-/**
- *
+/*
+ * Enable the power bit while preserving the selected sensing engines.
  */
 bool LightProximityAndGesture::enablePower(void)
 {
   return setMode(POWER, ENABLE);
 }
 
-/**
- *
+/*
+ * Clear the power bit without overwriting the other enable bits.
  */
 bool LightProximityAndGesture::disablePower(void)
 {
   return setMode(POWER, DISABLE);
 }
 
-/**
- *
+/*
+ * Read the ENABLE register bitmask; ERROR indicates a failed transfer.
  */
 uint8_t LightProximityAndGesture::getMode(void)
 {
@@ -227,11 +233,12 @@ uint8_t LightProximityAndGesture::getMode(void)
   return enableVal;
 }
 
-/**
- *
+/*
+ * Change the requested engine bit, or all mode bits, after validating the selector.
  */
 bool LightProximityAndGesture::setMode(APDS9960_MODE_t mode, STATE_t state)
 {
+  if((unsigned)mode > 6 || (unsigned)state > 1) return false;
   uint8_t enableVal = getMode();
   if(enableVal == ERROR)
   {
@@ -246,8 +253,8 @@ bool LightProximityAndGesture::setMode(APDS9960_MODE_t mode, STATE_t state)
   return true;
 }
 
-/**
- *
+/*
+ * Configure and enable ambient-light sensing with optional interrupts.
  */
 bool LightProximityAndGesture::enableAmbientLightSensor(STATE_t interrupt)
 {
@@ -271,8 +278,8 @@ bool LightProximityAndGesture::enableAmbientLightSensor(STATE_t interrupt)
   return true;
 }
 
-/**
- *
+/*
+ * Disable ambient-light sensing and its interrupt.
  */
 bool LightProximityAndGesture::disableAmbientLightSensor(void)
 {
@@ -287,8 +294,8 @@ bool LightProximityAndGesture::disableAmbientLightSensor(void)
   return true;
 }
 
-/**
- *
+/*
+ * Configure and enable proximity sensing with optional interrupts.
  */
 bool LightProximityAndGesture::enableProximitySensor(STATE_t interrupt)
 {
@@ -316,8 +323,8 @@ bool LightProximityAndGesture::enableProximitySensor(STATE_t interrupt)
   return true;
 }
 
-/**
- *
+/*
+ * Disable proximity sensing and its interrupt.
  */
 bool LightProximityAndGesture::disableProximitySensor(void)
 {
@@ -332,8 +339,8 @@ bool LightProximityAndGesture::disableProximitySensor(void)
   return true;
 }
 
-/**
- *
+/*
+ * Enable the gesture pipeline and its required power, wait, and proximity engines.
  */
 bool LightProximityAndGesture::enableGestureSensor(STATE_t interrupt)
 {
@@ -384,8 +391,8 @@ bool LightProximityAndGesture::enableGestureSensor(STATE_t interrupt)
   return true;
 }
 
-/**
- *
+/*
+ * Reset gesture processing and disable gesture mode and interrupts.
  */
 bool LightProximityAndGesture::disableGestureSensor(void)
 {
@@ -405,8 +412,8 @@ bool LightProximityAndGesture::disableGestureSensor(void)
   return true;
 }
 
-/**
- *
+/*
+ * Read the ambient-light interrupt enable from the sensor configuration.
  */
 bool LightProximityAndGesture::getAmbientLightIntState(void)
 {
@@ -418,8 +425,8 @@ bool LightProximityAndGesture::getAmbientLightIntState(void)
   return ((enableVal & AIEN_EN_MSK) >> AIEN_EN_POS);
 }
 
-/**
- *
+/*
+ * Update the ambient-light interrupt enable while preserving unrelated register bits.
  */
 bool LightProximityAndGesture::setAmbientLightInt(STATE_t intState)
 {
@@ -440,8 +447,8 @@ bool LightProximityAndGesture::setAmbientLightInt(STATE_t intState)
   return true;
 }
 
-/**
- *
+/*
+ * Read the proximity interrupt enable from the sensor configuration.
  */
 bool LightProximityAndGesture::getProximityIntState(void)
 {
@@ -453,8 +460,8 @@ bool LightProximityAndGesture::getProximityIntState(void)
   return ((enableVal & PIEN_EN_MSK) >> PIEN_EN_POS);
 }
 
-/**
- *
+/*
+ * Update the proximity interrupt enable while preserving unrelated register bits.
  */
 bool LightProximityAndGesture::setProximityInt(STATE_t intState)
 {
@@ -475,8 +482,8 @@ bool LightProximityAndGesture::setProximityInt(STATE_t intState)
   return true;
 }
 
-/**
- *
+/*
+ * Read the gesture interrupt enable from the sensor configuration.
  */
 bool LightProximityAndGesture::getGestureIntState(void)
 {
@@ -488,8 +495,8 @@ bool LightProximityAndGesture::getGestureIntState(void)
   return ((gconfig4 & GES_GIEN_MSK) >> GES_GIEN_POS);
 }
 
-/**
- *
+/*
+ * Update the gesture interrupt enable while preserving unrelated register bits.
  */
 bool LightProximityAndGesture::setGestureInt(STATE_t intState)
 {
@@ -510,8 +517,8 @@ bool LightProximityAndGesture::setGestureInt(STATE_t intState)
   return true;
 }
 
-/**
- *
+/*
+ * Read the ambient-light gain code from the sensor configuration.
  */
 uint8_t LightProximityAndGesture::getAmbientLightGain(void)
 {
@@ -523,8 +530,8 @@ uint8_t LightProximityAndGesture::getAmbientLightGain(void)
   return ((gain & ALS_GAIN_MSK) >> ALS_GAIN_POS);
 }
 
-/**
- *
+/*
+ * Update the ambient-light gain code while preserving unrelated register bits.
  */
 bool LightProximityAndGesture::setAmbientLightGain(uint8_t alsGain)
 {
@@ -545,8 +552,8 @@ bool LightProximityAndGesture::setAmbientLightGain(uint8_t alsGain)
   return true;
 }
 
-/**
- *
+/*
+ * Read the proximity gain code from the sensor configuration.
  */
 uint8_t LightProximityAndGesture::getProximityGain(void)
 {
@@ -558,8 +565,8 @@ uint8_t LightProximityAndGesture::getProximityGain(void)
   return ((gain & PRX_GAIN_MSK) >> PRX_GAIN_POS);
 }
 
-/**
- *
+/*
+ * Update the proximity gain code while preserving unrelated register bits.
  */
 bool LightProximityAndGesture::setProximityGain(uint8_t prxGain)
 {
@@ -580,8 +587,8 @@ bool LightProximityAndGesture::setProximityGain(uint8_t prxGain)
   return true;
 }
 
-/**
- *
+/*
+ * Read the proximity LED-drive code from the sensor configuration.
  */
 uint8_t LightProximityAndGesture::getLedDrive(void)
 {
@@ -593,8 +600,8 @@ uint8_t LightProximityAndGesture::getLedDrive(void)
   return ((gain & LED_DRIVE_MSK) >> LED_DRIVE_POS);
 }
 
-/**
- *
+/*
+ * Update the proximity LED-drive code while preserving unrelated register bits.
  */
 bool LightProximityAndGesture::setLedDrive(uint8_t drive)
 {
@@ -615,8 +622,8 @@ bool LightProximityAndGesture::setLedDrive(uint8_t drive)
   return true;
 }
 
-/**
- *
+/*
+ * Read the gesture gain code from the sensor configuration.
  */
 uint8_t LightProximityAndGesture::getGestureGain(void)
 {
@@ -628,8 +635,8 @@ uint8_t LightProximityAndGesture::getGestureGain(void)
   return ((gain & GES_GAIN_MSK) >> GES_GAIN_POS);
 }
 
-/**
- *
+/*
+ * Update the gesture gain code while preserving unrelated register bits.
  */
 bool LightProximityAndGesture::setGestureGain(uint8_t gesGain)
 {
@@ -650,8 +657,8 @@ bool LightProximityAndGesture::setGestureGain(uint8_t gesGain)
   return true;
 }
 
-/**
- *
+/*
+ * Read the gesture LED-drive code from the sensor configuration.
  */
 uint8_t LightProximityAndGesture::getGestureLedDrive(void)
 {
@@ -663,8 +670,8 @@ uint8_t LightProximityAndGesture::getGestureLedDrive(void)
   return ((config & GES_LDRIVE_MSK) >> GES_LDRIVE_POS);
 }
 
-/**
- *
+/*
+ * Update the gesture LED-drive code while preserving unrelated register bits.
  */
 bool LightProximityAndGesture::setGestureLedDrive(uint8_t drive)
 {
@@ -685,8 +692,8 @@ bool LightProximityAndGesture::setGestureLedDrive(uint8_t drive)
   return true;
 }
 
-/**
- *
+/*
+ * Read the gesture wait-time code from the sensor configuration.
  */
 uint8_t LightProximityAndGesture::getGestureWaitTime(void)
 {
@@ -698,8 +705,8 @@ uint8_t LightProximityAndGesture::getGestureWaitTime(void)
   return ((config & GES_WTIME_MSK) >> GES_WTIME_POS);
 }
 
-/**
- *
+/*
+ * Update the gesture wait-time code while preserving unrelated register bits.
  */
 bool LightProximityAndGesture::setGestureWaitTime(uint8_t drive)
 {
@@ -720,8 +727,8 @@ bool LightProximityAndGesture::setGestureWaitTime(uint8_t drive)
   return true;
 }
 
-/**
- *
+/*
+ * Read the gesture-mode bit from the sensor configuration.
  */
 uint8_t LightProximityAndGesture::getGestureMode(void)
 {
@@ -733,8 +740,8 @@ uint8_t LightProximityAndGesture::getGestureMode(void)
   return ((gconfig4 & GES_GMODE_MSK) >> GES_GMODE_POS);
 }
 
-/**
- *
+/*
+ * Update the gesture-mode bit while preserving unrelated register bits.
  */
 bool LightProximityAndGesture::setGestureMode(uint8_t mode)
 {
@@ -755,8 +762,8 @@ bool LightProximityAndGesture::setGestureMode(uint8_t mode)
   return true;
 }
 
-/**
- *
+/*
+ * Read the low ambient-light threshold as raw 16-bit ADC counts.
  */
 bool LightProximityAndGesture::getLightIntLowThreshold(uint16_t *threshold)
 {
@@ -774,8 +781,8 @@ bool LightProximityAndGesture::getLightIntLowThreshold(uint16_t *threshold)
   return true;
 }
 
-/**
- *
+/*
+ * Write the low ambient-light threshold as raw 16-bit ADC counts.
  */
 bool LightProximityAndGesture::setLightIntLowThreshold(uint16_t threshold)
 {
@@ -792,8 +799,8 @@ bool LightProximityAndGesture::setLightIntLowThreshold(uint16_t threshold)
   return true;
 }
 
-/**
- *
+/*
+ * Read the high ambient-light threshold as raw 16-bit ADC counts.
  */
 bool LightProximityAndGesture::getLightIntHighThreshold(uint16_t *threshold)
 {
@@ -811,8 +818,8 @@ bool LightProximityAndGesture::getLightIntHighThreshold(uint16_t *threshold)
   return true;
 }
 
-/**
- *
+/*
+ * Write the high ambient-light threshold as raw 16-bit ADC counts.
  */
 bool LightProximityAndGesture::setLightIntHighThreshold(uint16_t threshold)
 {
@@ -829,8 +836,8 @@ bool LightProximityAndGesture::setLightIntHighThreshold(uint16_t threshold)
   return true;
 }
 
-/**
- *
+/*
+ * Read the low proximity interrupt threshold in raw counts.
  */
 bool LightProximityAndGesture::getProximityIntLowThreshold(uint8_t *threshold)
 {
@@ -838,16 +845,16 @@ bool LightProximityAndGesture::getProximityIntLowThreshold(uint8_t *threshold)
   return readByte(APDS9960_PILT,threshold);
 }
 
-/**
- *
+/*
+ * Write the low proximity interrupt threshold in raw counts.
  */
 bool LightProximityAndGesture::setProximityIntLowThreshold(uint8_t threshold)
 {
   return writeByte(APDS9960_PILT,threshold);
 }
 
-/**
- *
+/*
+ * Read the high proximity interrupt threshold in raw counts.
  */
 bool LightProximityAndGesture::getProximityIntHighThreshold(uint8_t *threshold)
 {
@@ -855,16 +862,16 @@ bool LightProximityAndGesture::getProximityIntHighThreshold(uint8_t *threshold)
   return readByte(APDS9960_PIHT,threshold);
 }
 
-/**
- *
+/*
+ * Write the high proximity interrupt threshold in raw counts.
  */
 bool LightProximityAndGesture::setProximityIntHighThreshold(uint8_t threshold)
 {
   return writeByte(APDS9960_PIHT,threshold);
 }
 
-/**
- *
+/*
+ * Discard the current gesture batch, accumulated deltas, and decoded direction.
  */
 void LightProximityAndGesture::resetGestureParameters(void)
 {
@@ -884,8 +891,8 @@ void LightProximityAndGesture::resetGestureParameters(void)
   _gesture_motion = DIR_NONE;
 }
 
-/**
- *
+/*
+ * Compare valid first/last directional samples and accumulate near/far or swipe evidence.
  */
 bool LightProximityAndGesture::processGestureData(void)
 {
@@ -906,7 +913,7 @@ bool LightProximityAndGesture::processGestureData(void)
   int i;
 
   /* If we have less than 4 total gestures, that's not enough */
-  if( _gesture_data.total_gestures <= 4 )
+  if( _gesture_data.total_gestures <= 4 || _gesture_data.total_gestures > 32 )
   {
     return false;
   }
@@ -1022,8 +1029,8 @@ bool LightProximityAndGesture::processGestureData(void)
   return false;
 }
 
-/**
- *
+/*
+ * Convert accumulated directional deltas and near/far state into a gesture code.
  */
 bool LightProximityAndGesture::decodeGesture(void)
 {
@@ -1075,8 +1082,8 @@ bool LightProximityAndGesture::decodeGesture(void)
    return true;
 }
 
-/**
- *
+/*
+ * Read the LED-current boost code from the sensor configuration.
  */
 uint8_t LightProximityAndGesture::getLedBoost(void)
 {
@@ -1088,8 +1095,8 @@ uint8_t LightProximityAndGesture::getLedBoost(void)
   return ((config2 & CFG2_LED_BOOST_MSK) >> CFG2_LED_BOOST_POS);
 }
 
-/**
- *
+/*
+ * Update the LED-current boost code while preserving unrelated register bits.
  */
 bool LightProximityAndGesture::setLedBoost(uint8_t boost)
 {
@@ -1107,8 +1114,8 @@ bool LightProximityAndGesture::setLedBoost(uint8_t boost)
   return true;
 }
 
-/**
- *
+/*
+ * Send the dedicated command that clears the ambient-light interrupt latch.
  */
 bool LightProximityAndGesture::clearAmbientLightInt(void)
 {
@@ -1119,8 +1126,8 @@ bool LightProximityAndGesture::clearAmbientLightInt(void)
   return true;
 }
 
-/**
- *
+/*
+ * Send the dedicated command that clears the proximity interrupt latch.
  */
 bool LightProximityAndGesture::clearProximityInt(void)
 {
@@ -1131,8 +1138,8 @@ bool LightProximityAndGesture::clearProximityInt(void)
   return true;
 }
 
-/**
- *
+/*
+ * Read the clear channel as raw 16-bit counts into caller-provided storage.
  */
 bool LightProximityAndGesture::readAmbientLight(uint16_t *val)
 {
@@ -1149,8 +1156,8 @@ bool LightProximityAndGesture::readAmbientLight(uint16_t *val)
   return true;
 }
 
-/**
- *
+/*
+ * Read the red channel as raw 16-bit counts into caller-provided storage.
  */
 bool LightProximityAndGesture::readRedLight(uint16_t *val)
 {
@@ -1167,8 +1174,8 @@ bool LightProximityAndGesture::readRedLight(uint16_t *val)
   return true;
 }
 
-/**
- *
+/*
+ * Read the green channel as raw 16-bit counts into caller-provided storage.
  */
 bool LightProximityAndGesture::readGreenLight(uint16_t *val)
 {
@@ -1185,8 +1192,8 @@ bool LightProximityAndGesture::readGreenLight(uint16_t *val)
   return true;
 }
 
-/**
- *
+/*
+ * Read the blue channel as raw 16-bit counts into caller-provided storage.
  */
 bool LightProximityAndGesture::readBlueLight(uint16_t *val)
 {
@@ -1203,16 +1210,16 @@ bool LightProximityAndGesture::readBlueLight(uint16_t *val)
   return true;
 }
 
-/**
- *
+/*
+ * Read one raw proximity byte; counts are not a calibrated distance.
  */
 bool LightProximityAndGesture::readProximity(uint8_t *val)
 {
   return readByte(APDS9960_PDATA,val);
 }
 
-/**
- *
+/*
+ * Poll the gesture-valid flag before draining the FIFO.
  */
 bool LightProximityAndGesture::isGestureAvailable(void)
 {
@@ -1224,8 +1231,8 @@ bool LightProximityAndGesture::isGestureAvailable(void)
   return (bool)((gsts&GSTS_GVALID_MSK) >> GSTS_GVALID_POS);
 }
 
-/**
- *
+/*
+ * Drain directional FIFO batches and decode a gesture; NONE and TIMEOUT are non-gesture results.
  */
 int LightProximityAndGesture::readGesture(void)
 {
@@ -1237,8 +1244,9 @@ int LightProximityAndGesture::readGesture(void)
   int i;
   int timeCnt = 0;
 
+  resetGestureParameters();
   /* Make sure that power and gesture is on and data is valid */
-  if( !isGestureAvailable() || !(getMode() & (GEN_EN_MSK|PON_EN_MSK)) ) {
+  if( !isGestureAvailable() || (getMode() & (GEN_EN_MSK|PON_EN_MSK)) != (GEN_EN_MSK|PON_EN_MSK) ) {
       return DIR_NONE;
   }
 
@@ -1253,6 +1261,7 @@ int LightProximityAndGesture::readGesture(void)
 
     /* Get the contents of the STATUS register. Is data still valid? */
     if( !readByte(APDS9960_GSTATUS, &gstatus) ) {
+        resetGestureParameters();
         return ERROR;
     }
 
@@ -1261,16 +1270,19 @@ int LightProximityAndGesture::readGesture(void)
 
         /* Read the current FIFO level */
         if( !readByte(APDS9960_GFLVL, &fifo_level) ) {
-            return ERROR;
+            resetGestureParameters();
+        return ERROR;
         }
 
         /* If there's stuff in the FIFO, read it into our data block */
+        if(fifo_level > 32) { resetGestureParameters(); return ERROR; }
         if( fifo_level > 0) {
             bytes_read = readMultiBytes(APDS9960_GFIFO_U,
                                         (fifo_level * 4),
                                         (uint8_t*)fifo_data);
-            if( bytes_read == -1 ) {
-                return ERROR;
+            if( bytes_read != fifo_level * 4 ) {
+                resetGestureParameters();
+        return ERROR;
             }
 
             /* If at least 1 set of data, sort the data into U/D/L/R */
@@ -1313,47 +1325,39 @@ int LightProximityAndGesture::readGesture(void)
             motion = _gesture_motion;
             resetGestureParameters();
         }
+        resetGestureParameters();
         return motion;
     }
   }
 }
 
-/**
- *
+/*
+ * Return refreshed RGB percentages in the object buffer; check lightReadingValid() before use.
  */
 uint16_t *LightProximityAndGesture::getRGBProportion(bool print)
 {
-  static uint16_t color[3u];
-  color[0u] = color[1u] = color[2u] = 0u;
-  if(readRedLight(&color[0u]))
-  {
-      if(readGreenLight(&color[1u]))
-      {
-          if(readBlueLight(&color[2u]))
-          {
-              if(print)
-              {
-                  Serial.print("Red:");
-                  Serial.print(color[0u]);
-                  Serial.println("%");
-                  Serial.print("Green:");
-                  Serial.print(color[1u]);
-                  Serial.println("%");
-                  Serial.print("Blue:");
-                  Serial.print(color[2u]);
-                  Serial.println("%");
-              }
-          }
-      }
+  uint8_t data[6];
+  _lightReadingValid = false;
+  memset(_color, 0, sizeof(_color));
+  if(readMultiBytes(APDS9960_RDATAL, sizeof(data), data) != sizeof(data)) return _color;
+  uint16_t raw[3];
+  uint32_t sum = 0;
+  for(uint8_t i = 0; i < 3; ++i) { raw[i] = data[2*i] | ((uint16_t)data[2*i+1] << 8); sum += raw[i]; }
+  for(uint8_t i = 0; i < 3; ++i) _color[i] = sum ? (uint32_t)raw[i] * 100 / sum : 0;
+  _lightReadingValid = true;
+  if(print) {
+    Serial.print("RGB (%): "); Serial.print(_color[0]); Serial.print(", ");
+    Serial.print(_color[1]); Serial.print(", "); Serial.println(_color[2]);
   }
-  return color;
+  return _color;
 }
 
-/**
- *
+/*
+ * Return raw clear-channel counts; use lightReadingValid() to distinguish zero from failure.
  */
 uint16_t LightProximityAndGesture::getAmbientLight(bool print)
 {
+    _lightReadingValid = false;
     uint16_t ambient_light;
     if(readAmbientLight(&ambient_light))
     {
@@ -1361,54 +1365,97 @@ uint16_t LightProximityAndGesture::getAmbientLight(bool print)
         {
             Serial.print("Ambient Light: ");
             Serial.print(ambient_light);
-            Serial.println("Lux");
+            Serial.println(" counts");
         }
+        _lightReadingValid = true;
         return ambient_light;
     }
     return 0u;
 }
 
-/**
- *
+/*
+ * Convert one valid RGBC sample using the Adafruit APDS9960 RGB-to-lux approximation.
+ * Normalize exposure to MYOSA's nominal 103 ms / 4x setup; absolute accuracy needs calibration.
+ */
+bool LightProximityAndGesture::readAmbientLightLux(float *lux)
+{
+  uint8_t enabled, status, integration, control;
+  if(!readByte(APDS9960_ENABLE, &enabled) || (enabled & 0x03) != 0x03 ||
+     !readByte(APDS9960_STATUS, &status) || !(status & 0x01))
+    return false;
+  if(status & 0x80)
+  {
+    // Clear only the ALS latch; preserve any pending proximity interrupt.
+    writeByte(APDS9960_CICLEAR);
+    return false;
+  }
+  if(!readByte(APDS9960_ATIME, &integration) || !readByte(APDS9960_CONTROL, &control))
+    return false;
+  uint8_t data[8];
+  if(readMultiBytes(APDS9960_CDATAL, sizeof(data), data) != sizeof(data))
+    return false;
+  uint16_t channels[4];
+  const uint16_t cycles = 256u - integration;
+  const uint32_t limit = (uint32_t)cycles * 1025u;
+  const uint16_t saturation = limit < 65535u ? limit : 65535u;
+  for(uint8_t i = 0; i < 4; ++i)
+  {
+    channels[i] = data[2 * i] | ((uint16_t)data[2 * i + 1] << 8);
+    if(channels[i] >= saturation)
+      return false;
+  }
+  // Coefficients use raw red, green and blue channels, never RGB percentages.
+  const float weighted = -0.32466f * channels[1] + 1.57837f * channels[2] - 0.73191f * channels[3];
+  const uint8_t gains[4] = {1, 4, 16, 64};
+  const float exposure = (float)cycles * gains[control & ALS_GAIN_MSK];
+  *lux = fmaxf(0.0f, weighted * (37.0f * 4.0f) / exposure);
+  return true;
+}
+
+/*
+ * Return illuminance in lux, or NAN for unavailable, saturated or failed measurements.
+ */
+float LightProximityAndGesture::getAmbientLightLux(bool print)
+{
+  float lux = NAN;
+  _lightReadingValid = readAmbientLightLux(&lux);
+  if(print)
+  {
+    Serial.print("Ambient Light (lux): ");
+    if(_lightReadingValid)
+      Serial.println(lux, 2);
+    else
+      Serial.println("Unavailable");
+  }
+  return lux;
+}
+
+/*
+ * Refresh normalized RGB proportions and return the red percentage.
  */
 uint16_t LightProximityAndGesture::getRedProportion(void)
 {
-    uint16_t red_light = 0;
-    if(readRedLight(&red_light) == false)
-    {
-        return 0u;
-    }
-    return red_light;
+  return getRGBProportion(false)[0];
 }
 
-/**
- *
+/*
+ * Refresh normalized RGB proportions and return the green percentage.
  */
 uint16_t LightProximityAndGesture::getGreenProportion(void)
 {
-    uint16_t green_light = 0;
-    if(readGreenLight(&green_light) == false)
-    {
-        return 0u;
-    }
-    return green_light;
+  return getRGBProportion(false)[1];
 }
 
-/**
- *
+/*
+ * Refresh normalized RGB proportions and return the blue percentage.
  */
 uint16_t LightProximityAndGesture::getBlueProportion(void)
 {
-    uint16_t blue_light = 0;
-    if(readBlueLight(&blue_light) == false)
-    {
-        return 0u;
-    }
-    return blue_light;
+  return getRGBProportion(false)[2];
 }
 
-/**
- *
+/*
+ * Return raw proximity counts as a float, or NAN on transfer failure.
  */
 float LightProximityAndGesture::getProximity(bool print)
 {
@@ -1423,62 +1470,38 @@ float LightProximityAndGesture::getProximity(bool print)
         }
         return (float)proximity_data;
     }
-    return 0.0f;
+    return NAN;
 }
 
-/**
- *
+/*
+ * Read and decode a gesture into a static text buffer, overwritten by the next call.
  */
 char *LightProximityAndGesture::getGesture(bool print)
 {
-    char *gesture = (char *)"NONE";
-    if(isGestureAvailable())
-    {
-      Serial.print("Gesture: ");
-      switch(readGesture())
-      {
-        case DIR_UP:
-          gesture = (char *)"UP";
-          Serial.println("UP");
-          break;
-        case DIR_DOWN:
-          gesture = (char *)"DOWN";
-          Serial.println("DOWN");
-          break;
-        case DIR_LEFT:
-          gesture = (char *)"LEFT";
-          Serial.println("LEFT");
-          break;
-        case DIR_RIGHT:
-          gesture = (char *)"RIGHT";
-          Serial.println("RIGHT");
-          break;
-        case DIR_NEAR:
-          gesture = (char *)"NEAR";
-          Serial.println("NEAR");
-          break;
-        case DIR_FAR:
-          gesture = (char *)"FAR";
-          Serial.println("FAR");
-          break;
-        case TIMEOUT:
-          gesture = (char *)"TIMEOUT";
-          Serial.println("TIMEOUT");
-          break;
-        default:
-          gesture = (char *)"NONE";
-          Serial.println("NONE");
-          break;
-      }
-    }
-    return gesture;
+  // Writable storage preserves the existing char* API without exposing a string literal.
+  static char gesture[8];
+  const int direction = readGesture();
+  const char *name = "NONE";
+  switch(direction) {
+    case DIR_UP: name = "UP"; break;
+    case DIR_DOWN: name = "DOWN"; break;
+    case DIR_LEFT: name = "LEFT"; break;
+    case DIR_RIGHT: name = "RIGHT"; break;
+    case DIR_NEAR: name = "NEAR"; break;
+    case DIR_FAR: name = "FAR"; break;
+    case TIMEOUT: name = "TIMEOUT"; break;
+    case ERROR: name = "ERROR"; break;
+  }
+  strcpy(gesture, name);
+  if(print) { Serial.print("Gesture: "); Serial.println(gesture); }
+  return gesture;
 }
 
 /***********************************************************************************************
 * Platform dependent routines. Change these functions implementation based on microcontroller *
 ***********************************************************************************************/
-/**
- *
+/*
+ * Initialize the shared Wire bus at 100 kHz; normal sketches configure Wire before using drivers.
  */
 void LightProximityAndGesture::i2c_init(void)
 {
@@ -1486,8 +1509,8 @@ void LightProximityAndGesture::i2c_init(void)
   Wire.setClock(100000);
 }
 
-/**
- *
+/*
+ * Select one register and require a complete one-byte response.
  */
 bool LightProximityAndGesture::readByte(uint8_t reg, uint8_t *in)
 {
@@ -1506,33 +1529,22 @@ bool LightProximityAndGesture::readByte(uint8_t reg, uint8_t *in)
   return true;
 }
 
-/**
- *
+/*
+ * Read a complete FIFO/register block; return its byte count, or -1 on an invalid/short transfer.
  */
-int8_t LightProximityAndGesture::readMultiBytes(uint8_t reg, uint8_t length, uint8_t *in)
+int16_t LightProximityAndGesture::readMultiBytes(uint8_t reg, uint8_t length, uint8_t *in)
 {
-  int8_t nData = 0u;
-  Wire.beginTransmission((uint8_t)_i2cSlaveAddress);
+  if(!in || length == 0 || length > 128) return -1;
+  Wire.beginTransmission(_i2cSlaveAddress);
   Wire.write(reg);
-  if(Wire.endTransmission(true) != 0)
-  {
-    return -1;
-  }
-  Wire.requestFrom((uint8_t)_i2cSlaveAddress, length, 1u);
-  while(Wire.available())
-  {
-    if(nData >= length)
-    {
-      return -1;
-    }
-    in[nData] = Wire.read();
-    nData++;
-  }
-  return nData;
+  if(Wire.endTransmission(true) != 0) return -1;
+  if(Wire.requestFrom(_i2cSlaveAddress, length, (uint8_t)1) != length) return -1;
+  for(uint16_t i = 0; i < length; ++i) in[i] = Wire.read();
+  return length;
 }
 
-/**
- *
+/*
+ * Read from the current device pointer and require the requested number of bytes.
  */
 bool LightProximityAndGesture::readMultiBytes(uint8_t length, uint8_t *in)
 {
@@ -1549,8 +1561,8 @@ bool LightProximityAndGesture::readMultiBytes(uint8_t length, uint8_t *in)
   return true;
 }
 
-/**
- *
+/*
+ * Send a register/command byte and report the transfer result.
  */
 bool LightProximityAndGesture::writeByte(uint8_t reg)
 {
@@ -1563,23 +1575,24 @@ bool LightProximityAndGesture::writeByte(uint8_t reg)
   return false;
 }
 
-/**
- *
+/*
+ * Send a register/command byte and its value and report the transfer result.
  */
 bool LightProximityAndGesture::writeByte(uint8_t reg, uint8_t val)
 {
-  Wire.beginTransmission((uint8_t)_i2cSlaveAddress);
+  Wire.beginTransmission(_i2cSlaveAddress);
   Wire.write(reg);
   Wire.write(val);
-  if (Wire.endTransmission(true) == 0)
-  {
-    return true;
+  if(Wire.endTransmission(true) != 0) return false;
+  if(reg >= 0x80 && reg < 0xB0) {
+    _configValues[reg - 0x80] = val;
+    _configValid[(reg - 0x80) / 8] |= 1u << ((reg - 0x80) % 8);
   }
-  return false;
+  return true;
 }
 
-/**
- *
+/*
+ * Probe the I2C address without sending register data.
  */
 bool LightProximityAndGesture::writeAddress(void)
 {
@@ -1591,10 +1604,16 @@ bool LightProximityAndGesture::writeAddress(void)
   return false;
 }
 
-/**
- *
+/*
+ * Wait for the requested number of milliseconds using the Arduino platform delay.
  */
 void LightProximityAndGesture::delay_ms(uint16_t ms)
 {
   delay(ms);
+}
+
+uint8_t LightProximityAndGesture::getDeviceId(void)
+{
+  uint8_t id;
+  return readByte(APDS9960_ID, &id) ? id : ERROR;
 }

@@ -11,8 +11,6 @@
   MYOSA Platform consists of a centralized motherboard also known as Controller board. It is board designed of the ESP-Wroom32 module.
   ESP32 is a low-power system on a chip microcontrollers with integrated Wi-Fi and Bluetooth.
   It also has lot many GPIO pins along with famous communication protocols like i2c, uart, spi, etc. which can be used for interfacing with sensors and other modules.
-  Detailed Information about MYOSA platform and usage is provided in the link below.
-  Detailed Guide: https://drive.google.com/file/d/1On6kzIq3ejcu9aMGr2ZB690NnFrXG2yO/view
 
   NOTE
   All information, including URL references, is subject to change without prior notice.
@@ -21,11 +19,11 @@
   "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied
 
   Modifications
-  1 December, 2021 by Pegasus Automation
+  10 September, 2026 by Pegasus Automation
   (as a part of MYOSA Initiative)
   
-  Contact Team MakeSense EduTech for any kind of feedback/issues pertaining to performance or any update request.
-  Email: dev.myosa@gmail.com
+  Contact Team MYOSA for any kind of feedback/issues pertaining to performance or any update request.
+  Email: myosa.event@gmail.com
 */
 
 /* Setup Function */
