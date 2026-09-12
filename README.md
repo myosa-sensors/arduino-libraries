@@ -1,17 +1,12 @@
 # MYOSA Arduino Libraries
 
-**Version 2.0.0 | Branch: `main`**
+**Version 2.0.0**
 
-[MYOSA (Make Your Own Sensors Applications)](https://myosa-sensors.org/) is a modular platform for learning and building sensor applications. This branch contains the Arduino libraries and examples for the current MYOSA hardware bundle.
+[MYOSA (Make Your Own Sensors Applications)](https://myosa-sensors.org/) is a modular platform for learning and building sensor applications. This repository provides the latest MYOSA Arduino libraries and example sketches.
 
-## Choose your branch
+## Documentation and setup
 
-| Branch | Hardware bundle |
-| --- | --- |
-| [main](https://github.com/myosa-sensors/arduino-libraries/tree/main) | MYOSA with MAX30100 and VL53L0X; controller LED and buzzer |
-| [legacy](https://github.com/myosa-sensors/arduino-libraries/tree/legacy) | MYOSA Legacy with temperature/humidity, air quality and an actuator board |
-
-Install one complete branch at a time. The branches share library names, so mixing their files can cause incompatible dependencies or duplicate-library selection.
+For installation, hardware connections, Arduino IDE setup, uploading sketches and getting started, follow the [official MYOSA documentation](https://wiki.myosa-sensors.org/docs/intro/).
 
 ## Included libraries
 
@@ -27,23 +22,9 @@ Install one complete branch at a time. The branches share library names, so mixi
 
 Each library contains `src/`, `library.properties` and `keywords.txt`. All bundled sketches are inside `MYOSA/examples/`.
 
-## Installation
+## Master example
 
-1. Install Arduino IDE and the **esp32 by Espressif Systems** board package using the [official ESP32 installation guide](https://docs.espressif.com/projects/arduino-esp32/en/latest/installing.html).
-2. Select the appropriate branch on GitHub, choose **Code > Download ZIP**, and extract it.
-3. Find your sketchbook location in Arduino IDE preferences. Copy **each library folder listed above** directly into its `libraries` folder. For example, the combined header must be at `<sketchbook>/libraries/MYOSA/src/myosa.h`, with `AccelAndGyro`, `OLED` and the other libraries alongside `MYOSA`.
-4. Keep only one installed copy of each library. Separate sketchbooks can be used for the two bundles. Restart Arduino IDE after copying the folders.
-5. Connect the controller by USB, select its ESP32 board and port, and open an example through **File > Examples > MYOSA**, or open its `.ino` file directly.
-
-This download contains multiple Arduino libraries. Extract and install the individual library folders rather than treating the entire repository ZIP as one library. Arduino also documents [manual library installation](https://docs.arduino.cc/software/ide-v2/tutorials/ide-v2-installing-a-library/).
-
-The combined library targets ESP32. The build reference used for this bundle is **ESP32 Dev Module** (`esp32:esp32:esp32`) with **ESP32 core 3.3.11**. Select board settings appropriate to your controller.
-
-## Getting started
-
-Connect the boards required by the selected example, upload the sketch, and open Serial Monitor at **115200 baud**. The master initializes shared `Wire` at **100 kHz** and prints initialization results before starting its display cycle.
-
-Start with a basic example for each connected board, then open [1_MasterCode](MYOSA/examples/%232_Experiments/1_MasterCode/1_MasterCode.ino). The master reports unavailable boards and continues with the boards it can initialize. Individual examples may wait for their required board during setup.
+[1_MasterCode](MYOSA/examples/%232_Experiments/1_MasterCode/1_MasterCode.ino) prints readings to Serial at **115200 baud**, cycles through OLED pages and publishes BLE data. It initializes shared `Wire` at **100 kHz** and continues with available boards when a module cannot be initialized.
 
 The master cycles through **10 OLED pages** at 1.5 seconds per page. Keep calling `myosa.update()` frequently in custom loops so MAX30100 sampling and VL53L0X servicing continue between display and BLE updates; avoid long blocking delays.
 
@@ -58,7 +39,7 @@ The master cycles through **10 OLED pages** at 1.5 seconds per page. Keep callin
 
 ## Bluetooth Low Energy
 
-The master advertises as `MYOSA_1` and publishes sensor notifications. Motion, pressure and light retain their existing service UUIDs. Distance and pulse characteristics share the service ending in `b5`; their characteristic suffixes are `60`, `70` and `71`. This branch has no actuator event-command endpoint. BLE client layouts should match the selected branch.
+The master advertises as `MYOSA_1` and publishes sensor notifications. Motion, pressure and light retain their existing service UUIDs. Distance and pulse characteristics share the service ending in `b5`; their characteristic suffixes are `60`, `70` and `71`.
 
 ## Examples
 
@@ -90,17 +71,11 @@ The master advertises as `MYOSA_1` and publishes sensor notifications. Motion, p
 | [2_GetTimeFromInternet](MYOSA/examples/%233_Wi-Fi/2_GetTimeFromInternet/2_GetTimeFromInternet.ino) | Retrieve time over Wi-Fi |
 | [3_WiFiControlPanel](MYOSA/examples/%233_Wi-Fi/3_WiFiControlPanel/3_WiFiControlPanel.ino) | Control the LED and buzzer from a local webpage |
 
-## Troubleshooting
-
-- **Header not found or wrong library selected:** check that the library folders are direct children of your sketchbook's `libraries` directory and that both branch versions are not installed together.
-- **Board not detected:** check its power and I2C connections, then run its basic example and read the initialization messages.
-- **Upload reports access denied:** close Serial Monitor or other software using the selected serial port, then retry.
-- **Unreadable Serial output:** select 115200 baud and confirm the correct port.
-
 ## Support and attribution
 
 - [MYOSA website](https://myosa-sensors.org/)
-- [Report an issue](https://github.com/myosa-sensors/arduino-libraries/issues) with the branch, example, controller, ESP32 core version and relevant Serial output.
+- [Setup and usage documentation](https://wiki.myosa-sensors.org/docs/intro/)
+- [Report an issue](https://github.com/myosa-sensors/arduino-libraries/issues) with the library version, example, controller, ESP32 core version and relevant Serial output.
 - Contact Team MYOSA: [myosa.event@gmail.com](mailto:myosa.event@gmail.com)
 
 12 September, 2026 by Pegasus Automation  
