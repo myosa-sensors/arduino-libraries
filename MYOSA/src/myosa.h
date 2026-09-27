@@ -7,7 +7,7 @@
   MYOSA uses an ESP32 controller with Wi-Fi and Bluetooth connectivity.
   The kit includes motion, pressure, light/proximity/gesture, VL53L0X distance
   and MAX30100 heart-rate/SpO2 boards, with an OLED for measurements.
-  The libraries support individual sensor examples and combined BLE applications.
+  The libraries support individual sensor examples and combined Wi-Fi and BLE applications.
 
   NOTE
   All information, including URL references, is subject to change without prior notice.
@@ -16,7 +16,7 @@
   "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied
 
   Modifications
-  11 September, 2026 by Pegasus Automation
+  14 September, 2026 by Pegasus Automation
   (as a part of MYOSA Initiative)
   
   Contact Team MYOSA for any kind of feedback/issues pertaining to performance or any update request.
@@ -33,8 +33,6 @@
 #include <oled.h>
 #include <HeartRateAndSpO2.h>
 #include <ProximityAndDistance.h>
-#include <BLEDevice.h>
-#include <BLE2902.h>
 #include "VeraMono7pt7b.h"
 #include "VeraMonoBold7pt7b.h"
 #include "VeraMonoItalic7pt7b.h"
@@ -45,10 +43,18 @@
 // Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
 #define OLED_RESET 4 // Reset pin # (or -1 if sharing Arduino reset pin)
 
+/* One sensor snapshot shared by Wi-Fi and BLE. NAN means no valid measurement. */
+struct MYOSAReadings
+{
+  float values[8][4][3];
+  uint32_t sampledAt = 0;
+};
+
 /*
- * Initialize the shared bus before begin(); the combined class owns board and BLE setup.
+ * Initialize the shared bus first. begin() retains combined board and BLE setup.
+ * beginSensors() and beginBle() allow sketches to select their transport.
  * Call update() frequently; all shared-bus work stays in the caller task.
- * sendBleData() publishes motion, pressure, light, distance and pulse readings.
+ * sendBleData() queues a snapshot; update() services its paced BLE delivery.
  * Optical values share service 5; existing sensor characteristic UUIDs are retained.
  * Display helpers use the initialized OLED and preserve the existing BLE field order.
  */
@@ -70,6 +76,10 @@ class MYOSA
     /* functions */
     MYOSA();
     bool begin(void);
+    bool beginSensors(void);
+    bool beginBle(void);
+    void readSensors(MYOSAReadings &snapshot);
+    bool isDisplayReady(void) const;
     // Call frequently from loop; services optical samples and ready distance measurements.
     void update(void);
     void printAceelAndGyro(void);
@@ -84,6 +94,9 @@ class MYOSA
     void sendBleData(void);
 
   private:
+    // Assigned only by beginBle(), so Wi-Fi builds do not include the BLE stack.
+    void (*_serviceBle)(void) = nullptr;
+    static void serviceBle(void);
     bool _displayReady = false;
     bool _heartReady = false, _heartHasRaw = false;
     bool _distanceReady = false, _distanceHasSample = false;

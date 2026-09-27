@@ -7,7 +7,7 @@
   MYOSA uses an ESP32 controller with Wi-Fi and Bluetooth connectivity.
   The kit includes motion, pressure, light/proximity/gesture, VL53L0X distance
   and MAX30100 heart-rate/SpO2 boards, with an OLED for measurements.
-  The libraries support individual sensor examples and combined BLE applications.
+  The libraries support individual sensor examples and combined Wi-Fi and BLE applications.
 
   NOTE
   All information, including URL references, is subject to change without prior notice.
@@ -16,7 +16,7 @@
   "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied
 
   Modifications
-  11 September, 2026 by Pegasus Automation
+  14 September, 2026 by Pegasus Automation
   (as a part of MYOSA Initiative)
   
   Contact Team MYOSA for any kind of feedback/issues pertaining to performance or any update request.
@@ -25,23 +25,6 @@
 
 /* Library Inclusion */
 #include "myosa.h"
-
-#define NUM_SERVICES 8
-#define MAX_CHARACTERISTICS 5
-
-static BLECharacteristic *pCharacteristics[NUM_SERVICES][MAX_CHARACTERISTICS] = {};
-// Logical group indices retain the existing sensor characteristic UUID suffixes.
-static const uint8_t characteristicCounts[NUM_SERVICES] = {4, 0, 3, 3, 0, 0, 1, 2};
-static const uint8_t parameterCounts[NUM_SERVICES][4] = {
-    {3, 3, 3, 2}, {}, {2, 3, 1, 0}, {1, 1, 3, 0}, {}, {}, {1, 0, 0, 0}, {1, 1, 0, 0}};
-
-class MyServerCallbacks : public BLEServerCallbacks
-{
-    void onDisconnect(BLEServer *server) override
-    {
-      server->getAdvertising()->start();
-    }
-};
 
 MYOSA::MYOSA()
     : Ag(MPU6050_ADDRESS_AD0_HIGH),     /* Accelerometer and Gyroscope sensor init */
@@ -54,53 +37,10 @@ MYOSA::MYOSA()
 }
 
 /*
- * Create BLE services and initialize the supplied boards; false means at least one setup step failed.
+ * Initialize the supplied boards; false means at least one setup step failed.
  */
-bool MYOSA::begin(void)
+bool MYOSA::beginSensors(void)
 {
-  BLEDevice::init("MYOSA_1");
-  BLEServer *pServer = BLEDevice::createServer();
-  if(!pServer)
-    return false;
-  pServer->setCallbacks(new MyServerCallbacks());
-
-  // Keep existing sensor UUIDs; the optical values share the service ending in b5.
-  BLEService *pService = nullptr;
-  for(int i = 0; i < NUM_SERVICES; ++i)
-  {
-    const uint8_t count = characteristicCounts[i];
-    if(count == 0)
-      continue;
-    if(i != 7)
-    {
-      char serviceUUID[37];
-      const int serviceId = i == 6 ? 5 : i;
-      sprintf(serviceUUID, "4fafc201-1fb5-459e-8fcc-c5c9c33191b%d", serviceId);
-      Serial.println(serviceUUID);
-      const uint32_t numHandles = 1 + 3 * (i == 6 ? count + characteristicCounts[7] : count);
-      pService = pServer->createService(BLEUUID(serviceUUID), numHandles);
-      if(!pService)
-        return false;
-    }
-    for(int j = 0; j < count; ++j)
-    {
-      char characteristicUUID[37];
-      sprintf(characteristicUUID, "beb5483e-36e1-4688-b7f5-ea07361b2b%d%d", i, j);
-      Serial.println(characteristicUUID);
-      pCharacteristics[i][j] =
-          pService->createCharacteristic(characteristicUUID, BLECharacteristic::PROPERTY_NOTIFY);
-      if(!pCharacteristics[i][j])
-        return false;
-      pCharacteristics[i][j]->addDescriptor(new BLE2902());
-    }
-    // Start the shared optical service only after all of its values are registered.
-    if(i != 6 && !pService->start())
-      return false;
-  }
-
-  pServer->getAdvertising()->start();
-  Serial.println("BLE server started!");
-
   bool ready = true;
   _displayReady = display.begin();
   ready = _displayReady && ready;
@@ -120,6 +60,12 @@ bool MYOSA::begin(void)
   if(!ready)
     Serial.println("One or more MYOSA boards could not be initialized.");
   return ready;
+}
+
+/* Report whether connection information can be shown on the OLED. */
+bool MYOSA::isDisplayReady(void) const
+{
+  return _displayReady;
 }
 
 /*
@@ -182,12 +128,12 @@ void MYOSA::drawDegreeSymbol(void)
 // }
 
 /*
- * Collect one sensor snapshot and send notifications only for valid readings.
+ * Collect readings in the existing BLE field order; unavailable values remain NAN.
  */
-void MYOSA::sendBleData(void)
+void MYOSA::readSensors(MYOSAReadings &snapshot)
 {
   serviceHeartRateAndSpO2();
-  float readings[NUM_SERVICES][4][3];
+  float (&readings)[8][4][3] = snapshot.values;
   for(auto &service : readings)
     for(auto &characteristic : service)
       for(float &v : characteristic)
@@ -243,39 +189,7 @@ void MYOSA::sendBleData(void)
     readings[7][0][0] = Hr.getHeartRate(false);
     readings[7][1][0] = Hr.getSpO2(false);
   }
-  for(uint8_t service = 0; service < NUM_SERVICES; ++service)
-  {
-    for(uint8_t characteristic = 0; characteristic < characteristicCounts[service];
-        ++characteristic)
-    {
-      const uint8_t count = parameterCounts[service][characteristic];
-      const float *v = readings[service][characteristic];
-      bool valid = true;
-      for(uint8_t i = 0; i < count; ++i)
-        valid = isfinite(v[i]) && valid;
-      if(!valid || !pCharacteristics[service][characteristic])
-        continue;
-      char payload[96];
-      int size;
-      const bool integers = service == 6 || (service == 3 && characteristic != 1);
-      if(integers && count == 1)
-        size = snprintf(payload, sizeof(payload), "%.0f", v[0]);
-      else if(integers)
-        size = snprintf(payload, sizeof(payload), "%.0f, %.0f, %.0f", v[0], v[1], v[2]);
-      else if(count == 1)
-        size = snprintf(payload, sizeof(payload), "%.2f", v[0]);
-      else if(count == 2)
-        size = snprintf(payload, sizeof(payload), "%.2f, %.2f", v[0], v[1]);
-      else
-        size = snprintf(payload, sizeof(payload), "%.2f, %.2f, %.2f", v[0], v[1], v[2]);
-      if(size < 0 || size >= (int)sizeof(payload))
-        continue;
-      pCharacteristics[service][characteristic]->setValue(payload);
-      pCharacteristics[service][characteristic]->notify();
-      serviceHeartRateAndSpO2();
-    }
-  }
-
+  snapshot.sampledAt = millis();
 }
 
 /*
@@ -571,6 +485,8 @@ void MYOSA::serviceHeartRateAndSpO2(void)
  */
 void MYOSA::update(void)
 {
+  if(_serviceBle)
+    _serviceBle();
   if(!_heartReady && uint32_t(millis() - _heartAttemptTime) >= 2000)
     initializeHeartRateAndSpO2();
   serviceHeartRateAndSpO2();

@@ -16,7 +16,7 @@ For installation, hardware connections, Arduino IDE setup, uploading sketches an
 | [BarometricPressure](BarometricPressure/) | BMP180 | Pressure, temperature and calculated altitude |
 | [HeartRateAndSpO2](HeartRateAndSpO2/) | MAX30100 | Heart rate, estimated SpO2, raw optical samples and die temperature |
 | [LightProximityAndGesture](LightProximityAndGesture/) | APDS9960 | Ambient light, RGB proportions, proximity and gestures |
-| [MYOSA](MYOSA/) | Combined library | Sensor initialization, OLED pages and BLE integration |
+| [MYOSA](MYOSA/) | Combined library | Sensor initialization, OLED pages, Wi-Fi and BLE integration |
 | [OLED](OLED/) | SSD1306 | 128 x 64 display, graphics and fonts |
 | [ProximityAndDistance](ProximityAndDistance/) | VL53L0X | Distance in millimeters and range-status reporting |
 
@@ -24,9 +24,29 @@ Each library contains `src/`, `library.properties` and `keywords.txt`. All bundl
 
 ## Master example
 
-[1_MasterCode](MYOSA/examples/%232_Experiments/1_MasterCode/1_MasterCode.ino) prints readings to Serial at **115200 baud**, cycles through OLED pages and publishes BLE data. It initializes shared `Wire` at **100 kHz** and continues with available boards when a module cannot be initialized.
+[1_MasterCode](MYOSA/examples/%232_Experiments/1_MasterCode/1_MasterCode.ino) prints readings to Serial at **115200 baud**, cycles through OLED pages and sends readings over Wi-Fi or BLE. It initializes shared `Wire` at **100 kHz** and continues with available boards when a module cannot be initialized.
 
-The master cycles through **10 OLED pages** at 1.5 seconds per page. Keep calling `myosa.update()` frequently in custom loops so MAX30100 sampling and VL53L0X servicing continue between display and BLE updates; avoid long blocking delays.
+The master cycles through **10 sensor OLED pages** at 1.5 seconds per page, plus a connection-address page in Wi-Fi mode. Keep calling `myosa.update()` frequently in custom loops so MAX30100 sampling and VL53L0X servicing continue between display and network updates; avoid long blocking delays.
+
+## Master connection settings
+
+Set these five fields in `1_MasterCode.ino` before uploading:
+
+| Field | Purpose | Default |
+| --- | --- | --- |
+| `mode` | `WIFI` or `BLE` | `WIFI` |
+| `ap_ssid` | MYOSA hotspot name | `MYOSA` |
+| `ap_password` | Hotspot password, 8 to 63 characters | `myosa1234` |
+| `sta_ssid` | Existing Wi-Fi network name | Empty |
+| `sta_password` | Existing Wi-Fi network password | Empty |
+
+**Wi-Fi:** AP and STA run together. Join the MYOSA hotspot and open **http://192.168.4.1/**, or join the same LAN as the controller and open its assigned IP shown on Serial and OLED. Empty STA credentials or an unavailable router leave the hotspot accessible. The station retries after disconnection. `http://myosa.local/` is an optional address where mDNS works; use the numeric IP otherwise. Use a LAN subnet other than `192.168.4.0/24` to avoid an overlap with the hotspot. No Internet or separate webpage upload is needed. The dashboard shows measurements; it does not control outputs.
+
+**BLE:** Download [MYOSA_BLE.html](MYOSA/extras/web/MYOSA_BLE.html) as an actual HTML file and open it in a browser supporting Web Bluetooth. Enable Bluetooth, press **Connect BLE**, and select `MYOSA_1`. Local-file access is browser/OS dependent and is being tested; a file preview or embedded viewer may not expose Bluetooth. The page reports unsupported access and connection errors. iPhone/iPad Safari users should use Wi-Fi. No hosted dashboard is required for this test version.
+
+Both dashboards use the same layout and clear stale readings instead of leaving them displayed as current. Pulse values may remain unavailable while the finger signal settles. The BLE file contains all scripts and styling for offline use.
+
+The editable dashboard source is `MYOSA/extras/web/dashboard.html`. After changing it, run `python MYOSA/extras/web/build_dashboard.py` to regenerate `MYOSA_BLE.html` and the compressed Wi-Fi asset in `MYOSA/src/myosaDashboard.h`. Re-upload the master sketch to update the ESP32 webpage. The generated Wi-Fi page excludes BLE connection code.
 
 ## Controller outputs and measurements
 
@@ -40,6 +60,8 @@ The master cycles through **10 OLED pages** at 1.5 seconds per page. Keep callin
 ## Bluetooth Low Energy
 
 The master advertises as `MYOSA_1` and publishes sensor notifications. Motion, pressure and light retain their existing service UUIDs. Distance and pulse characteristics share the service ending in `b5`; their characteristic suffixes are `60`, `70` and `71`.
+
+The master queues a fresh snapshot every second. Call `update()` frequently: it spaces notifications and services the optical sensors without a blocking delay. A stalled transmission closes the BLE link so it can reconnect. The downloadable page times out stalled requests and retries a lost connection up to twice; use Connect BLE for another attempt. Replace older downloaded copies after updating the page.
 
 ## Examples
 
@@ -60,7 +82,7 @@ The master advertises as `MYOSA_1` and publishes sensor notifications. Motion, p
 
 | Example | Purpose |
 | --- | --- |
-| [1_MasterCode](MYOSA/examples/%232_Experiments/1_MasterCode/1_MasterCode.ino) | Cycle through sensor readings on Serial and OLED; publish BLE data |
+| [1_MasterCode](MYOSA/examples/%232_Experiments/1_MasterCode/1_MasterCode.ino) | Cycle through sensor readings on Serial and OLED; send Wi-Fi or BLE data |
 | [2_BurglarAlarm](MYOSA/examples/%232_Experiments/2_BurglarAlarm/2_BurglarAlarm.ino) | Detect light entering a normally dark locker |
 
 ### Wi-Fi
@@ -78,7 +100,7 @@ The master advertises as `MYOSA_1` and publishes sensor notifications. Motion, p
 - [Report an issue](https://github.com/myosa-sensors/arduino-libraries/issues) with the library version, example, controller, ESP32 core version and relevant Serial output.
 - Contact Team MYOSA: [myosa.event@gmail.com](mailto:myosa.event@gmail.com)
 
-12 September, 2026 by Pegasus Automation  
+14 September, 2026 by Pegasus Automation  
 (as a part of MYOSA Initiative)
 
 Bundled third-party code retains its original attribution and license notices in the source files and component license files.

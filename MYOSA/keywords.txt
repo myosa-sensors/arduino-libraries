@@ -1,6 +1,13 @@
 # Syntax highlighting for MYOSA
 MYOSA	KEYWORD1
+MYOSAWeb	KEYWORD1
+MYOSAReadings	KEYWORD1
 begin	KEYWORD2
+beginSensors	KEYWORD2
+beginBle	KEYWORD2
+readSensors	KEYWORD2
+isDisplayReady	KEYWORD2
+printConnectionInfo	KEYWORD2
 update	KEYWORD2
 drawCentreString	KEYWORD2
 drawDegreeSymbol	KEYWORD2
