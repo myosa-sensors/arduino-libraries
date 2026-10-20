@@ -2,9 +2,9 @@
 <!--
   This code is developed under the MYOSA (LearnTheEasyWay) initiative of MakeSense EduTech and Pegasus Automation.
   Synopsis of MYOSA dashboard
-  Display live MYOSA measurements using Wi-Fi or a browser BLE connection.
+  Display live MYOSA measurements over the controller hotspot or local Wi-Fi network.
   All styles and scripts are included for use without external downloads.
-  build_dashboard.py creates the downloadable BLE file and embedded Wi-Fi page.
+  build_dashboard.py creates the compressed webpage embedded in the controller.
 
   NOTE
   All information, including URL references, is subject to change without prior notice.
@@ -13,7 +13,7 @@
   "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied
 
   Modifications
-  14 September, 2026 by Pegasus Automation
+  20 October, 2026 by Pegasus Automation
   (as a part of MYOSA Initiative)
   Contact Team MYOSA for any kind of feedback/issues pertaining to performance or any update request.
   Email: myosa.event@gmail.com
@@ -31,8 +31,7 @@
     main{max-width:1160px;margin:0 auto;padding:28px 20px}h1{font-size:clamp(24px,4vw,34px);margin:0 0 8px;letter-spacing:-.7px}h2{margin:0;font-size:15px;font-weight:650}
     .intro{color:#536c76;margin:0 0 22px;line-height:1.6}.connection{background:#fff;border:1px solid #d8e5e8;border-radius:14px;padding:18px;margin-bottom:24px;display:flex;gap:16px;justify-content:space-between;align-items:center;flex-wrap:wrap}
     .status-line{display:flex;gap:9px;align-items:center;font-weight:650}.dot{width:9px;height:9px;border-radius:50%;background:#95a6ad;flex:none}.dot.live{background:#0e9c7c}.dot.error{background:#c27715}
-    #detail{font-size:13px;color:#536c76;margin:7px 0 0;max-width:700px;line-height:1.5;overflow-wrap:anywhere}.actions{display:flex;gap:8px;flex-wrap:wrap}button{font:inherit;font-size:14px;font-weight:650;padding:11px 17px;border:0;border-radius:8px;background:#087c70;color:white;cursor:pointer;min-height:44px}
-    button.secondary{background:#edf3f5;color:#294e5b}button:disabled{opacity:.45;cursor:default}button:focus-visible{outline:3px solid #27b9a5;outline-offset:3px}[hidden]{display:none!important}
+    #detail{font-size:13px;color:#536c76;margin:7px 0 0;max-width:700px;line-height:1.5;overflow-wrap:anywhere}
     .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.card{background:#fff;border:1px solid #dce7ea;border-radius:13px;padding:18px;min-height:149px}.sensor{font-size:10px;color:#657e88;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:8px}.values{display:flex;flex-wrap:wrap;gap:8px 17px;margin-top:20px}.reading{display:flex;align-items:baseline;gap:5px}.axis{font-size:11px;color:#6b7f87}.number{font-size:23px;font-weight:650;letter-spacing:-.5px;font-variant-numeric:tabular-nums}.unit{font-size:11px;color:#617780}.freshness{font-size:11px;color:#74868d;margin:12px 0 0;min-height:15px}.card.fresh{border-top:3px solid #32bfa6;padding-top:16px}
     footer{display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;font-size:12px;color:#617780;margin-top:25px;line-height:1.7}a{color:#076f68}#help{background:#e8f0f2;border-radius:10px;padding:15px;font-size:13px;color:#405e6a;line-height:1.6;margin:20px 0 0}
     @media(max-width:850px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:540px){.grid{grid-template-columns:1fr}.card{min-height:135px}.connection{align-items:flex-start}main{padding:22px 14px}.values{gap:8px 22px}}
@@ -44,8 +43,7 @@
     <h1>Your sensors, live.</h1>
     <p class="intro">Explore motion, light, pressure, distance and pulse measurements.</p>
     <section class="connection" aria-label="Connection">
-      <div><div class="status-line"><span id="dot" class="dot"></span><span id="status" role="status" aria-live="polite">Ready to connect</span></div><p id="detail">Choose a connection to start receiving readings.</p></div>
-      <div class="actions"><button id="connect" hidden>Connect BLE</button><button id="disconnect" class="secondary" hidden disabled>Disconnect</button></div>
+      <div><div class="status-line"><span id="dot" class="dot"></span><span id="status" role="status" aria-live="polite">Connecting over Wi-Fi</span></div><p id="detail">Requesting readings from your controller.</p></div>
     </section>
     <div id="cards" class="grid"></div>
     <p id="help"></p>
@@ -53,9 +51,6 @@
   </main>
   <script>
     'use strict';
-    // The build script selects one transport and removes the other from each output.
-    const transport = 'auto';
-    const selectedTransport = transport === 'auto' ? (location.protocol === 'file:' ? 'ble' : 'wifi') : transport;
     const fields = [
       ['00','Acceleration','MPU6050',['X','Y','Z'],['cm/s²','cm/s²','cm/s²']],
       ['01','Angular velocity','MPU6050',['X','Y','Z'],['°/s','°/s','°/s']],
@@ -75,11 +70,7 @@
     const status = document.getElementById('status');
     const detail = document.getElementById('detail');
     const dot = document.getElementById('dot');
-    const connectButton = document.getElementById('connect');
-    const disconnectButton = document.getElementById('disconnect');
     const help = document.getElementById('help');
-    let active = false;
-    let lastPacket = 0;
     for(const [id,title,sensor,labels,units] of fields)
     {
       const card = document.createElement('section');
@@ -118,7 +109,7 @@
       });
       entry.note.textContent = entry.valid ? 'Live reading' : 'No valid reading';
     }
-    // A lost notification must not leave an old sensor value looking current.
+    // A missed response must not leave an old sensor value looking current.
     setInterval(() => {
       const now = performance.now();
       for(const entry of cards.values())
@@ -130,11 +121,8 @@
           entry.note.textContent = 'No recent valid reading';
         }
       }
-      if(active && selectedTransport === 'ble' && now - lastPacket > 5000)
-        setStatus('BLE connected · awaiting readings','No recent notifications. Check sensor connections and the master sketch.','error');
     },1000);
 
-    /* WIFI_START */
     async function pollWifi()
     {
       const controller = new AbortController();
@@ -149,13 +137,10 @@
           throw new Error('Invalid sensor response');
         for(const [id] of fields)
           showReading(id,Array.isArray(data.readings[id]) ? data.readings[id] : Array(cards.get(id).numbers.length).fill(null));
-        active = true;
-        lastPacket = performance.now();
         setStatus('Wi-Fi connected','Receiving readings from ' + location.host,'live');
       }
       catch(error)
       {
-        active = false;
         clearReadings('Connection lost');
         setStatus('Wi-Fi disconnected · retrying','Reconnect to the MYOSA hotspot or the same LAN as your controller.','error');
       }
@@ -165,251 +150,18 @@
         setTimeout(pollWifi,500);
       }
     }
-    if(selectedTransport === 'wifi')
+    if(location.protocol === 'http:' || location.protocol === 'https:')
     {
       help.textContent = 'This page connects directly to your controller. Keep this device on the MYOSA hotspot or the same local network. Internet is not required. Missing or invalid measurements appear as —.';
       setStatus('Connecting over Wi-Fi','Requesting readings from your controller.');
       pollWifi();
     }
-    /* WIFI_END */
-
-    /* BLE_START */
-    let device = null;
-    let session = 0;
-    let connecting = false;
-    let subscriptions = [];
-    let gattBusy = false;
-    let recoveryTimer = null;
-    let recoveryCount = 0;
-    const serviceIds = [0,2,3,5];
-    const serviceUuid = id => '4fafc201-1fb5-459e-8fcc-c5c9c33191b' + id;
-    const characteristicUuid = id => 'beb5483e-36e1-4688-b7f5-ea07361b2b' + id;
-    const recoveryHelp = 'If reconnecting still fails, close this page, switch Bluetooth off and on, then reopen the file.';
-
-    function disconnectGatt(candidate)
+    else
     {
-      try { if(candidate && candidate.gatt.connected) candidate.gatt.disconnect(); }
-      catch(error) { /* The browser may already have closed the link. */ }
-    }
-    function releaseBle()
-    {
-      ++session;
-      clearTimeout(recoveryTimer);
-      recoveryTimer = null;
-      for(const [characteristic,listener] of subscriptions)
-        characteristic.removeEventListener('characteristicvaluechanged',listener);
-      subscriptions = [];
-      const previousDevice = device;
-      device = null;
-      if(previousDevice)
-        previousDevice.removeEventListener('gattserverdisconnected',onDisconnected);
-      disconnectGatt(previousDevice);
-      active = connecting = false;
-      connectButton.disabled = false;
-      disconnectButton.disabled = true;
-      clearReadings('Disconnected');
-    }
-    function endBle(message)
-    {
-      recoveryCount = 0;
-      releaseBle();
-      setStatus('BLE disconnected',message);
+      help.textContent = 'Join the MYOSA hotspot and open http://192.168.4.1/, or use the LAN address shown by your controller.';
+      setStatus('Open the controller webpage','This page receives readings when served by the MYOSA controller.');
     }
 
-    // A timeout releases the UI, but the native operation must settle before another starts.
-    async function bleStep(action,label,current,candidate,deadline)
-    {
-      if(current !== session) throw new Error('Connection cancelled.');
-      if(gattBusy) throw new Error('Bluetooth is still finishing an earlier request. ' + recoveryHelp);
-      const remaining = Math.min(12000,deadline - performance.now());
-      if(remaining <= 0) throw new Error('Connection setup timed out. ' + recoveryHelp);
-      gattBusy = true;
-      let timer;
-      const operation = Promise.resolve().then(action).finally(() => {
-        if(current !== session) disconnectGatt(candidate);
-        gattBusy = false;
-      });
-      try
-      {
-        return await Promise.race([operation,new Promise((resolve,reject) => {
-          timer = setTimeout(() => reject(new Error(label + ' timed out. ' + recoveryHelp)),remaining);
-        })]);
-      }
-      finally { clearTimeout(timer); }
-    }
-    function recoverBle(reason)
-    {
-      const candidate = device;
-      releaseBle();
-      if(!candidate || recoveryCount >= 2)
-      {
-        setStatus('BLE needs reconnection',reason + ' Check the controller and sensors, then press Connect BLE. ' + recoveryHelp,'error');
-        return;
-      }
-      ++recoveryCount;
-      connectButton.disabled = true;
-      disconnectButton.disabled = false;
-      setStatus('BLE reconnecting (' + recoveryCount + '/2)',reason);
-      const current = session;
-      recoveryTimer = setTimeout(() => {
-        recoveryTimer = null;
-        if(current !== session) return;
-        if(gattBusy)
-        {
-          releaseBle();
-          setStatus('Bluetooth request still pending',recoveryHelp,'error');
-          return;
-        }
-        connectToDevice(candidate);
-      },2000);
-    }
-    function onDisconnected(event)
-    {
-      if(event.target !== device) return;
-      if(connecting)
-      {
-        releaseBle();
-        setStatus('BLE connection interrupted','Press Connect BLE to retry. ' + recoveryHelp,'error');
-      }
-      else
-        recoverBle('The controller disconnected.');
-    }
-    async function connectToDevice(candidate)
-    {
-      if(gattBusy)
-      {
-        releaseBle();
-        setStatus('Bluetooth request still pending',recoveryHelp,'error');
-        return;
-      }
-      connecting = true;
-      connectButton.disabled = true;
-      disconnectButton.disabled = false;
-      const current = ++session;
-      const deadline = performance.now() + 30000;
-      device = candidate;
-      device.addEventListener('gattserverdisconnected',onDisconnected);
-      setStatus('Connecting to ' + (device.name || 'MYOSA'),'Discovering sensor notifications.');
-      try
-      {
-        const server = await bleStep(() => candidate.gatt.connect(),'Bluetooth connection',current,candidate,deadline);
-        if(current !== session) return;
-        for(const serviceId of serviceIds)
-        {
-          if(current !== session) return;
-          let service;
-          try
-          {
-            service = await bleStep(() => server.getPrimaryService(serviceUuid(serviceId)),
-                                    'Sensor discovery',current,candidate,deadline);
-          }
-          catch(error) { if(error.name === 'NotFoundError' && server.connected) continue; throw error; }
-          const matching = fields.filter(([id]) => (Number(id[0]) >= 6 ? 5 : Number(id[0])) === serviceId);
-          for(const [id] of matching)
-          {
-            if(current !== session) return;
-            try
-            {
-              const characteristic = await bleStep(() => service.getCharacteristic(characteristicUuid(id)),
-                                                   'Sensor field discovery',current,candidate,deadline);
-              if(current !== session) return;
-              const listener = event => {
-                if(current !== session) return;
-                const payload = new TextDecoder().decode(event.target.value).trim();
-                const parts = payload.split(',').map(part => part.trim());
-                // Reject truncated notifications, including a cut-off final decimal value.
-                const integers = id === '30' || id === '32' || id === '60';
-                const pattern = integers ? /^-?\d+$/ : /^-?\d+\.\d{2}$/;
-                if(!parts.every(part => pattern.test(part))) return;
-                const values = parts.map(part => part.length ? Number(part) : NaN);
-                if(values.length !== cards.get(id).numbers.length || !values.every(Number.isFinite)) return;
-                showReading(id,values);
-                lastPacket = performance.now();
-                if(active) setStatus('BLE connected',candidate.name || 'MYOSA','live');
-              };
-              characteristic.addEventListener('characteristicvaluechanged',listener);
-              subscriptions.push([characteristic,listener]);
-              try
-              {
-                await bleStep(() => characteristic.startNotifications(),'Notification subscription',current,candidate,deadline);
-              }
-              catch(error)
-              {
-                characteristic.removeEventListener('characteristicvaluechanged',listener);
-                if(current === session)
-                  subscriptions = subscriptions.filter(item => item[0] !== characteristic);
-                throw error;
-              }
-            }
-            catch(error) { if(error.name !== 'NotFoundError' || !server.connected) throw error; }
-          }
-        }
-        if(current !== session) return;
-        if(!subscriptions.length)
-          throw new Error('No MYOSA sensor notifications were found. Upload the master sketch in BLE mode.');
-        active = true;
-        connecting = false;
-        lastPacket = performance.now();
-        setStatus('BLE connected',(candidate.name || 'MYOSA') + ' ? ' + subscriptions.length + ' sensor fields subscribed','live');
-      }
-      catch(error)
-      {
-        if(current !== session) return;
-        releaseBle();
-        setStatus('BLE connection failed',error.message,'error');
-      }
-    }
-    async function connectBle()
-    {
-      if(connecting || active) return;
-      if(gattBusy)
-      {
-        setStatus('Bluetooth request still pending',recoveryHelp,'error');
-        return;
-      }
-      recoveryCount = 0;
-      clearTimeout(recoveryTimer);
-      connecting = true;
-      connectButton.disabled = true;
-      disconnectButton.disabled = false;
-      const current = ++session;
-      try
-      {
-        // Keep the chooser in the button event to retain browser user activation.
-        const candidate = await navigator.bluetooth.requestDevice({filters:[{namePrefix:'MYOSA'}],optionalServices:serviceIds.map(serviceUuid)});
-        if(current === session) await connectToDevice(candidate);
-      }
-      catch(error)
-      {
-        if(current !== session) return;
-        endBle(error.name === 'NotFoundError' ? 'No device selected. Press Connect BLE to try again.' : error.message);
-      }
-    }
-    if(selectedTransport === 'ble')
-    {
-      connectButton.hidden = disconnectButton.hidden = false;
-      help.textContent = 'Enable Bluetooth, upload the master sketch in BLE mode, then press Connect BLE and select MYOSA_1. Readings refresh every second. A lost connection is retried up to twice. Local-file access depends on your browser and OS; iPhone/iPad Safari users should use Wi-Fi. Missing readings appear as ?; hold a finger still on the pulse sensor while it settles.';
-      if(!window.isSecureContext || !navigator.bluetooth || typeof navigator.bluetooth.requestDevice !== 'function')
-      {
-        connectButton.disabled = true;
-        setStatus('BLE unavailable in this browser','This browser or file-opening method does not expose Web Bluetooth. Try a supported Chrome/Edge browser, or use MYOSA in Wi-Fi mode.','error');
-      }
-      else
-      {
-        setStatus('Ready for BLE','Press Connect BLE to choose your MYOSA controller.');
-        connectButton.addEventListener('click',connectBle);
-        disconnectButton.addEventListener('click',() => endBle('Disconnected. Press Connect BLE to connect again.'));
-        setInterval(() => {
-          if(!active) return;
-          const age = performance.now() - lastPacket;
-          if(age > 8000) recoverBle('No sensor notifications arrived for eight seconds.');
-          else if(age > 5000)
-            setStatus('BLE readings delayed','Waiting for fresh sensor notifications.','error');
-        },1000);
-      }
-      window.addEventListener('pagehide',releaseBle);
-    }
-    /* BLE_END */
   </script>
 </body>
 </html>

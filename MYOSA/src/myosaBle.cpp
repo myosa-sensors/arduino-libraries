@@ -16,7 +16,7 @@
   "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied
 
   Modifications
-  14 September, 2026 by Pegasus Automation
+  20 October, 2026 by Pegasus Automation
   (as a part of MYOSA Initiative)
   
   Contact Team MYOSA for any kind of feedback/issues pertaining to performance or any update request.
@@ -236,7 +236,7 @@ bool MYOSA::beginBle(void)
     return true;
   BLEDevice::setCustomGattsHandler(handleBleEvent);
   BLEDevice::init("MYOSA_1");
-  // Allow complete multi-value payloads when the browser negotiates its packet size.
+  // Allow complete multi-value payloads when the BLE client negotiates its packet size.
   BLEDevice::setMTU(128);
   BLEServer *pServer = BLEDevice::createServer();
   if(!pServer)

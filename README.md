@@ -34,7 +34,7 @@ Set these five fields in `1_MasterCode.ino` before uploading:
 
 | Field | Purpose | Default |
 | --- | --- | --- |
-| `mode` | `WIFI` or `BLE` | `WIFI` |
+| `mode` | `WIFI` or `BLE` | `BLE` |
 | `ap_ssid` | MYOSA hotspot name | `MYOSA` |
 | `ap_password` | Hotspot password, 8 to 63 characters | `myosa1234` |
 | `sta_ssid` | Existing Wi-Fi network name | Empty |
@@ -42,11 +42,11 @@ Set these five fields in `1_MasterCode.ino` before uploading:
 
 **Wi-Fi:** AP and STA run together. Join the MYOSA hotspot and open **http://192.168.4.1/**, or join the same LAN as the controller and open its assigned IP shown on Serial and OLED. Empty STA credentials or an unavailable router leave the hotspot accessible. The station retries after disconnection. `http://myosa.local/` is an optional address where mDNS works; use the numeric IP otherwise. Use a LAN subnet other than `192.168.4.0/24` to avoid an overlap with the hotspot. No Internet or separate webpage upload is needed. The dashboard shows measurements; it does not control outputs.
 
-**BLE:** Download [MYOSA_BLE.html](MYOSA/extras/web/MYOSA_BLE.html) as an actual HTML file and open it in a browser supporting Web Bluetooth. Enable Bluetooth, press **Connect BLE**, and select `MYOSA_1`. Local-file access is browser/OS dependent and is being tested; a file preview or embedded viewer may not expose Bluetooth. The page reports unsupported access and connection errors. iPhone/iPad Safari users should use Wi-Fi. No hosted dashboard is required for this test version.
+**BLE:** Connect to `MYOSA_1` with a BLE-capable application or a custom client and subscribe to the sensor notification characteristics. Students can choose how to display, record or process the readings. BLE mode operates independently of the Wi-Fi dashboard.
 
-Both dashboards use the same layout and clear stale readings instead of leaving them displayed as current. Pulse values may remain unavailable while the finger signal settles. The BLE file contains all scripts and styling for offline use.
+The Wi-Fi dashboard clears stale readings instead of leaving them displayed as current. Pulse values may remain unavailable while the finger signal settles. All scripts and styling are embedded in the controller for offline use.
 
-The editable dashboard source is `MYOSA/extras/web/dashboard.html`. After changing it, run `python MYOSA/extras/web/build_dashboard.py` to regenerate `MYOSA_BLE.html` and the compressed Wi-Fi asset in `MYOSA/src/myosaDashboard.h`. Re-upload the master sketch to update the ESP32 webpage. The generated Wi-Fi page excludes BLE connection code.
+The editable dashboard source is `MYOSA/extras/web/dashboard.html`. After changing it, run `python MYOSA/extras/web/build_dashboard.py` to regenerate the compressed Wi-Fi asset in `MYOSA/src/myosaDashboard.h`. Re-upload the master sketch to update the ESP32 webpage, then open it at the controller's AP or LAN address.
 
 ## Controller outputs and measurements
 
@@ -61,7 +61,9 @@ The editable dashboard source is `MYOSA/extras/web/dashboard.html`. After changi
 
 The master advertises as `MYOSA_1` and publishes sensor notifications. Motion, pressure and light retain their existing service UUIDs. Distance and pulse characteristics share the service ending in `b5`; their characteristic suffixes are `60`, `70` and `71`.
 
-The master queues a fresh snapshot every second. Call `update()` frequently: it spaces notifications and services the optical sensors without a blocking delay. A stalled transmission closes the BLE link so it can reconnect. The downloadable page times out stalled requests and retries a lost connection up to twice; use Connect BLE for another attempt. Replace older downloaded copies after updating the page.
+The master queues a fresh snapshot every second. Call `update()` frequently: it spaces notifications and services the optical sensors without a blocking delay. A stalled transmission closes the BLE link so the client can reconnect.
+
+Notifications contain text numbers; multi-value readings use comma-separated values in the existing field order. Clients must enable notifications for each required characteristic. Request an ATT MTU of **128**, where the client API supports it, to accommodate multi-value readings; payloads larger than the negotiated MTU minus three bytes are skipped. Unavailable measurements are not notified, so clients should track freshness and clear stale values.
 
 ## Examples
 
@@ -100,7 +102,7 @@ The master queues a fresh snapshot every second. Call `update()` frequently: it 
 - [Report an issue](https://github.com/myosa-sensors/arduino-libraries/issues) with the library version, example, controller, ESP32 core version and relevant Serial output.
 - Contact Team MYOSA: [myosa.event@gmail.com](mailto:myosa.event@gmail.com)
 
-14 September, 2026 by Pegasus Automation  
+20 October, 2026 by Pegasus Automation  
 (as a part of MYOSA Initiative)
 
 Bundled third-party code retains its original attribution and license notices in the source files and component license files.

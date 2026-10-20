@@ -20,7 +20,7 @@
   "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied
 
   Modifications
-  14 September, 2026 by Pegasus Automation
+  20 October, 2026 by Pegasus Automation
   (as a part of MYOSA Initiative)
   
   Contact Team MYOSA for any kind of feedback/issues pertaining to performance or any update request.
@@ -32,6 +32,7 @@
 #include <myosaWeb.h>
 
 /* Connection settings: Wi-Fi always runs the hotspot and station together. */
+/* WIFI serves the dashboard; BLE sends readings to a client chosen by the student. */
 enum ConnectionMode { WIFI, BLE };
 constexpr ConnectionMode mode = BLE;
 const char *ap_ssid = "MYOSA";
@@ -77,7 +78,7 @@ void setup(void)
   if(mode == WIFI && web)
     web->printConnectionInfo();
   else
-    Serial.printf("Open MYOSA/extras/web/MYOSA_BLE.html in a supported browser and select Connect BLE.\n");
+    Serial.printf("BLE mode: connect to MYOSA_1 with a BLE client and subscribe to sensor notifications.\n");
 }
 
 /* Loop Function */

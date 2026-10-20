@@ -1,5 +1,5 @@
 """
-Synopsis: Build the downloadable BLE page and compressed ESP32 Wi-Fi dashboard.
+Synopsis: Build the compressed ESP32 Wi-Fi dashboard.
 Run with Python 3 after editing dashboard.html; no third-party packages are needed.
 
 All information, including URL references, is subject to change without prior notice.
@@ -8,7 +8,7 @@ Unless required by applicable law or agreed to in writing, this software is dist
 "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 
 Modifications
-12 September, 2026 by Pegasus Automation
+20 October, 2026 by Pegasus Automation
 (as a part of MYOSA Initiative)
 Contact Team MYOSA
 Email: myosa.event@gmail.com
@@ -16,22 +16,12 @@ Email: myosa.event@gmail.com
 
 from pathlib import Path
 import gzip
-import re
-
-
-def build(source, mode):
-    other = 'WIFI' if mode == 'ble' else 'BLE'
-    page, count = re.subn(r'    /\* ' + other + r'_START \*/.*?/\* ' + other + r'_END \*/\n', '', source, flags=re.S)
-    if count != 1 or source.count("const transport = 'auto';") != 1:
-        raise ValueError('Dashboard transport markers are missing or duplicated.')
-    return page.replace("const transport = 'auto';", "const transport = '" + mode + "';")
 
 
 def main():
     folder = Path(__file__).resolve().parent
     source = (folder / 'dashboard.html').read_text(encoding='utf-8')
-    (folder / 'MYOSA_BLE.html').write_text(build(source, 'ble'), encoding='utf-8', newline='\n')
-    wifi = build(source, 'wifi').encode('utf-8')
+    wifi = source.encode('utf-8')
     # Fix the gzip timestamp and header to keep identical input reproducible.
     compressed = bytearray(gzip.compress(wifi, compresslevel=9, mtime=0))
     compressed[9] = 255
@@ -44,7 +34,6 @@ def main():
     header += '};\n\n#endif\n'
     (folder.parent.parent / 'src' / 'myosaDashboard.h').write_text(header, encoding='utf-8', newline='\n')
     print('Wi-Fi page: %d bytes; compressed: %d bytes.' % (len(wifi), len(compressed)))
-    print('BLE file: MYOSA_BLE.html')
 
 
 if __name__ == '__main__':
